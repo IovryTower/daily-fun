@@ -1,0 +1,36 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FunFeed from '../../components/FunFeed.astro';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const allFun = await getCollection('fun');
+  const allTags = new Set<string>();
+  for (const item of allFun) {
+    for (const tag of item.data.tags) {
+      allTags.add(tag);
+    }
+  }
+
+  return [...allTags].map((tag) => ({
+    params: { tag },
+    props: {
+      items: allFun
+        .filter((item) => item.data.tags.includes(tag))
+        .sort((a, b) => b.data.date.getTime() - a.data.date.getTime()),
+    },
+  }));
+}
+
+const { tag } = Astro.params;
+const { items } = Astro.props;
+---
+
+<BaseLayout title={`#${tag} - 标签`} description={`浏览所有 #${tag} 相关内容`}>
+  <div class="mb-8 flex items-center gap-3">
+    <a href="/" class="text-sm text-text-secondary no-underline transition-colors hover:text-accent">← 首页</a>
+    <h1 class="text-2xl font-bold text-text-primary">#{tag}</h1>
+    <span class="text-sm text-text-secondary">({items.length})</span>
+  </div>
+  <FunFeed items={items} />
+</BaseLayout>

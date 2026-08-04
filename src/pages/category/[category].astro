@@ -1,0 +1,42 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import FunFeed from '../../components/FunFeed.astro';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const allFun = await getCollection('fun');
+  const categories = [...new Set(allFun.map((item) => item.data.category))];
+
+  return categories.map((category) => ({
+    params: { category },
+    props: {
+      items: allFun
+        .filter((item) => item.data.category === category)
+        .sort((a, b) => b.data.date.getTime() - a.data.date.getTime()),
+    },
+  }));
+}
+
+const { category } = Astro.params;
+const { items } = Astro.props;
+
+const categoryLabels: Record<string, string> = {
+  meme: '梗图',
+  joke: '笑话',
+  quote: '趣句',
+  gif: '动图',
+  image: '趣图',
+  other: '其他',
+};
+
+const label = categoryLabels[category!] || category;
+---
+
+<BaseLayout title={`${label} - 分类`} description={`浏览所有${label}内容`}>
+  <div class="mb-8 flex items-center gap-3">
+    <a href="/category" class="text-sm text-text-secondary no-underline transition-colors hover:text-accent">← 全部分类</a>
+    <h1 class="text-2xl font-bold text-text-primary">{label}</h1>
+    <span class="text-sm text-text-secondary">({items.length})</span>
+  </div>
+  <FunFeed items={items} />
+</BaseLayout>

@@ -1,0 +1,38 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+
+const allFun = await getCollection('fun');
+
+const categoryLabels: Record<string, string> = {
+  meme: '梗图',
+  joke: '笑话',
+  quote: '趣句',
+  gif: '动图',
+  image: '趣图',
+  other: '其他',
+};
+
+const categoryCounts: Record<string, number> = {};
+for (const item of allFun) {
+  const cat = item.data.category;
+  categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+}
+
+const categories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]);
+---
+
+<BaseLayout title="分类" description="按分类浏览搞笑内容">
+  <h1 class="mb-8 text-2xl font-bold text-text-primary">分类</h1>
+  <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+    {categories.map(([cat, count]) => (
+      <a
+        href={`/category/${cat}`}
+        class="group rounded-xl border border-border bg-surface p-5 text-center no-underline transition-all hover:border-accent hover:shadow-[0_4px_12px_var(--color-card-shadow)]"
+      >
+        <div class="text-2xl font-bold text-accent group-hover:text-accent-hover">{count}</div>
+        <div class="mt-1 text-sm text-text-secondary">{categoryLabels[cat] || cat}</div>
+      </a>
+    ))}
+  </div>
+</BaseLayout>

@@ -1,0 +1,23 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="关于" description="关于 Daily Fun">
+  <h1 class="mb-6 text-2xl font-bold text-text-primary">关于 Daily Fun</h1>
+  <div class="prose prose-sm max-w-none text-text-secondary">
+    <p class="mb-4 text-lg leading-relaxed">
+      <strong class="text-text-primary">Daily Fun</strong> 是一个适合摸鱼、放松、每天打开浏览几分钟的轻量级网站。
+    </p>
+    <p class="mb-4">这里收集每日搞笑图片、文字、GIF、Meme 和趣味短句。</p>
+    <h2 class="mb-3 mt-6 text-lg font-bold text-text-primary">内容分类</h2>
+    <ul class="mb-4 list-inside list-disc space-y-1">
+      <li>梗图 — 网络热梗图片</li>
+      <li>笑话 — 冷笑话、段子</li>
+      <li>趣句 — 毒鸡汤、神回复</li>
+      <li>动图 — 搞笑 GIF</li>
+      <li>趣图 — 翻车照、巧合照</li>
+    </ul>
+    <h2 class="mb-3 mt-6 text-lg font-bold text-text-primary">技术栈</h2>
+    <p class="mb-4">Astro + TypeScript + Tailwind CSS，部署在 GitHub Pages，完全免费。</p>
+  </div>
+</BaseLayout>

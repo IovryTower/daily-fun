@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import FunFeed from '../components/FunFeed.astro';
+import { getCollection } from 'astro:content';
+
+const allFun = await getCollection('fun');
+const sortedFun = allFun.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+---
+
+<BaseLayout title="最新" description="最新发布的搞笑内容">
+  <h1 class="mb-8 text-2xl font-bold text-text-primary">最新</h1>
+  <FunFeed items={sortedFun} />
+</BaseLayout>
