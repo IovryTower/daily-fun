@@ -1,0 +1,61 @@
+---
+import CategoryBadge from './CategoryBadge.astro';
+import TagList from './TagList.astro';
+import { render } from 'astro:content';
+
+interface Props {
+  title: string;
+  date: Date;
+  category: string;
+  tags: string[];
+  image?: string;
+  imageAlt?: string;
+  description?: string;
+  body?: any;
+}
+
+const { title, date, category, tags, image, imageAlt, description, body } = Astro.props;
+
+const formattedDate = date.toLocaleDateString('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+
+const isTextOnly = !image && (category === 'joke' || category === 'quote');
+---
+
+<article class="rounded-xl border border-border bg-surface p-5 shadow-[0_1px_3px_var(--color-card-shadow)] transition-shadow hover:shadow-[0_4px_12px_var(--color-card-shadow)]">
+  <div class="mb-3 flex items-center justify-between">
+    <CategoryBadge category={category} />
+    <time datetime={date.toISOString()} class="text-xs text-text-secondary">
+      {formattedDate}
+    </time>
+  </div>
+
+  {image && (
+    <div class="mb-3 overflow-hidden rounded-lg">
+      <img
+        src={image}
+        alt={imageAlt || title}
+        loading="lazy"
+        decoding="async"
+        class="w-full object-contain"
+      />
+    </div>
+  )}
+
+  {isTextOnly && description ? (
+    <blockquote class="mb-3 border-l-3 border-accent pl-4 text-lg leading-relaxed text-text-primary">
+      {description}
+    </blockquote>
+  ) : description ? (
+    <p class="mb-3 text-sm text-text-secondary">{description}</p>
+  ) : null}
+
+  <h2 class="mb-2 text-lg font-bold text-text-primary">{title}</h2>
+
+  <div class="flex items-center justify-between">
+    <TagList tags={tags} />
+  </div>
+</article>

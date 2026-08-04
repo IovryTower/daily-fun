@@ -1,0 +1,38 @@
+---
+import FunCard from './FunCard.astro';
+
+interface FunItem {
+  data: {
+    title: string;
+    date: Date;
+    category: string;
+    tags: string[];
+    image?: string;
+    imageAlt?: string;
+    description?: string;
+  };
+  body: any;
+  id: string;
+}
+
+interface Props {
+  items: FunItem[];
+}
+
+const { items } = Astro.props;
+---
+
+<div class="flex flex-col gap-6">
+  {items.map((item) => (
+    <FunCard
+      title={item.data.title}
+      date={item.data.date}
+      category={item.data.category}
+      tags={item.data.tags}
+      image={item.data.image}
+      imageAlt={item.data.imageAlt}
+      description={item.data.description}
+      body={item.body}
+    />
+  ))}
+</div>

@@ -1,0 +1,20 @@
+---
+interface Props {
+  category: string;
+}
+
+const { category } = Astro.props;
+
+const categoryLabels: Record<string, string> = {
+  meme: '梗图',
+  joke: '笑话',
+  quote: '趣句',
+  gif: '动图',
+  image: '趣图',
+  other: '其他',
+};
+---
+
+<span class="inline-block rounded-md bg-badge-bg px-2 py-0.5 text-xs font-medium text-accent">
+  {categoryLabels[category] || category}
+</span>
