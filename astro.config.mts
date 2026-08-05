@@ -2,9 +2,15 @@ import { defineConfig } from 'astro/config';
 import tailwindcss from '@tailwindcss/vite';
 import sitemap from '@astrojs/sitemap';
 
+const isGitHubPages = !process.env.VERCEL && !process.env.CF_PAGES;
+
 export default defineConfig({
-  site: process.env.VERCEL ? 'https://daily-fun-psi.vercel.app' : 'https://iovrytower.github.io',
-  base: process.env.VERCEL ? undefined : '/daily-fun',
+  site: isGitHubPages
+    ? 'https://iovrytower.github.io'
+    : process.env.CF_PAGES
+      ? `https://${process.env.CF_PAGES_URL || 'daily-fun.pages.dev'}`
+      : 'https://daily-fun-psi.vercel.app',
+  base: isGitHubPages ? '/daily-fun' : undefined,
   output: 'static',
   integrations: [sitemap()],
   vite: {
