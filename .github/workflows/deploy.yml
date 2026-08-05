@@ -21,19 +21,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
-
-      - name: Setup esbuild
-        run: node node_modules/esbuild/install.js
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: node node_modules/astro/bin/astro.mjs build
+        run: pnpm build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

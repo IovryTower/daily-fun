@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/prebuild.mjs && node node_modules/astro/bin/astro.mjs dev",
-    "build": "node scripts/prebuild.mjs && node node_modules/astro/bin/astro.mjs build",
-    "preview": "node node_modules/astro/bin/astro.mjs preview",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
