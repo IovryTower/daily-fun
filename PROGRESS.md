@@ -52,11 +52,11 @@
 
 ## CI 部署状态
 
-🔴 当前阻塞：CI 构建失败，正在修复
+🟡 修复中：重新生成 pnpm-lock.yaml（移除中文镜像 URL），已推送 `6f7f60e`，等待 CI 结果
 
-- 原因：Windows exFAT 不支持 symlink，导致本地/CI 环境差异
-- 方案：CI 用 pnpm（Linux 正常），本地用 npm --ignore-scripts
-- 待推送：commit `4c04d32` 需手动 `git push`
+- 根因：pnpm-lock.yaml 包含 78 处 r.cnpmjs.org URL → CI 海外访问 CERT_HAS_EXPIRED
+- 修复：本地 pnpm registry 切换为官方源，重新生成 lockfile
+- CI 配置：pnpm + Node 22 + --registry https://registry.npmjs.org/
 
 ## 线上地址
 
@@ -84,4 +84,4 @@ node scripts/prebuild.mjs && node node_modules/astro/bin/astro.mjs build
 
 ---
 
-*最后更新：2026-08-05*
+*最后更新：2026-08-05（CI lockfile 修复）*
