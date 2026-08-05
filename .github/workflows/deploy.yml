@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy
 
 on:
   push:
@@ -34,13 +34,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --registry https://registry.npmjs.org/
 
-      - name: Build
+      - name: Build (GitHub Pages)
         run: pnpm build
+        env:
+          ASTRO_TELEMETRY_DISABLED: 1
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
+      - name: Build (Cloudflare Pages)
+        run: pnpm build
+        env:
+          CF_PAGES: 1
+          ASTRO_TELEMETRY_DISABLED: 1
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: pages deploy dist --project-name daily-fun
 
   deploy:
     environment:

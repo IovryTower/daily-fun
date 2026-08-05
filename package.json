@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "build:cf": "CF_PAGES=1 astro build",
+    "deploy:cf": "CF_PAGES=1 astro build && wrangler pages deploy dist --project-name daily-fun",
     "preview": "astro preview",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -22,8 +24,10 @@
     "@astrojs/check": "^0.9.10",
     "eslint": "^10.8.0",
     "eslint-plugin-astro": "^3.1.0",
+    "playwright": "^1.62.1",
     "prettier": "^3.9.6",
     "prettier-plugin-astro": "^0.14.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "wrangler": "^4.118.0"
   }
 }
