@@ -30,11 +30,12 @@ const categoryLabels: Record<string, string> = {
 };
 
 const label = categoryLabels[category!] || category;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <BaseLayout title={`${label} - 分类`} description={`浏览所有${label}内容`}>
   <div class="mb-8 flex items-center gap-3">
-    <a href="/category" class="text-sm text-text-secondary no-underline transition-colors hover:text-accent">← 全部分类</a>
+    <a href={`${base}/category`} class="text-sm text-text-secondary no-underline transition-colors hover:text-accent">← 全部分类</a>
     <h1 class="text-2xl font-bold text-text-primary">{label}</h1>
     <span class="text-sm text-text-secondary">({items.length})</span>
   </div>

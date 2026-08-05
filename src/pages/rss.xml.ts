@@ -5,6 +5,7 @@ import type { APIContext } from 'astro';
 export async function GET(context: APIContext) {
   const allFun = await getCollection('fun');
   const sortedFun = allFun.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+  const base = context.site?.pathname.replace(/\/$/, '') || '';
 
   return rss({
     title: 'Daily Fun',
@@ -14,7 +15,7 @@ export async function GET(context: APIContext) {
       title: item.data.title,
       pubDate: item.data.date,
       description: item.data.description || '',
-      link: `/category/${item.data.category}`,
+      link: `${base}/category/${item.data.category}`,
       categories: item.data.tags,
     })),
     customData: '<language>zh-CN</language>',
