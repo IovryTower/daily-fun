@@ -26,11 +26,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Install dependencies
-        run: npm install --ignore-scripts && node node_modules/esbuild/install.js
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build
-        run: node node_modules/astro/bin/astro.mjs build
+        run: pnpm build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
