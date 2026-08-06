@@ -10,7 +10,7 @@
 | 1 | 项目骨架 + 首页信息流 + 暗黑模式 + 首次部署 | ✅ 已完成 | 2026-08-04 |
 | 2 | 分类/标签/关于/404/RSS + 多平台部署 | ✅ 已完成 | 2026-08-06 |
 | 3 | Lighthouse ≥ 95 优化 | ✅ 已完成 | 2026-08-06 |
-| 4 | 点赞/收藏/随机/详情页 | 🔄 进行中 | — |
+| 4 | 点赞/收藏/分页/回到顶部 | ✅ 已完成 | 2026-08-06 |
 | 5 | PWA + Pagefind 搜索 | ⬜ 未开始 | — |
 | 6 | 内容管理 CLI 工具 | ✅ 已完成 | 2026-08-04 |
 | 7 | 高级扩展（R2/Workers/AI） | ⬜ 未开始 | — |
@@ -36,6 +36,8 @@
 - [x] BaseHead — SEO meta(OG/Twitter Card/canonical)
 - [x] Header — 粘性导航 + 暗黑模式
 - [x] Footer — 版本时间(北京时间) + 刷新按钮 + RSS
+- [x] BackToTop — 回到顶部按钮(滚动>300px显示)
+- [x] Pagination — 通用分页导航
 
 ### 部署
 - [x] GitHub Pages CI 自动部署
@@ -83,12 +85,14 @@
 - [ ] 图片优化（WebP 转换、尺寸适配）→ 移至 Phase 7
 - 最终成绩: Performance 94, Accessibility 100, Best Practices 96, SEO 100
 
-### Phase 4 — 交互增强 🔄
+### Phase 4 — 交互增强 ✅
 - [x] 点赞功能 (LocalStorage) — 卡片底部按钮，点击切换 0/1
 - [x] 收藏功能 (LocalStorage) — 卡片底部按钮，点击切换 0/1
-- [ ] 随机推荐页 `/random`
-- [ ] 内容详情页 `/fun/[slug]`
-- [ ] 回到顶部按钮
+- [x] 回到顶部按钮 — 滚动>300px显示，点击平滑回顶
+- [x] 分页 — 首页/Latest/分类页每页6条 + 页码导航
+- [x] 分类展示优化 — 条目计数 badge + 分页
+- [ ] ~~随机推荐页 `/random`~~ → 搁置
+- [ ] ~~内容详情页 `/fun/[slug]`~~ → 搁置
 
 ### Phase 5 — 搜索与 PWA
 - [ ] Pagefind 站内搜索
@@ -122,6 +126,7 @@ node scripts/prebuild.mjs && node node_modules/astro/bin/astro.mjs build
 | 图片卡片 | 只显示图片，不渲染 title/description | 图片本身即内容，文字冗余 |
 | 文字卡片 | blockquote + title | 突出文字内容，视觉区分 |
 | 点赞/收藏 | localStorage 本地计数 | 零后端零成本，换设备重置（预期行为） |
+| 分页 | Astro paginate() 每页6条 | 内容增多后体验优化，主流展示方式 |
 | 内容管理 | 单一 Collection + category 字段 | 首页混合展示，标签跨类型聚合 |
 
 ## 踩坑记录
@@ -136,4 +141,4 @@ node scripts/prebuild.mjs && node node_modules/astro/bin/astro.mjs build
 8. **Cloudflare CI 不稳定** → 本地 wrangler 手动部署作为备选
 
 ---
-*最后更新：2026-08-06 (Phase 3 完成 + Phase 4 点赞/收藏完成)*
+*最后更新：2026-08-06 (Phase 4 完成，进入 Phase 5)*
