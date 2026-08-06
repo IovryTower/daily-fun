@@ -46,13 +46,12 @@ async function main() {
 
     const imagePath = `/images/memes/${newImageName}`;
     const mdContent = `---
-title: "今日梗图 ${index}"
+title: "梗图 ${index}"
 date: ${dateStr}
 category: meme
 tags: [梗图, 搞笑]
 image: ${imagePath}
 imageAlt: 搞笑梗图
-description: "今日份的快乐源泉"
 ---
 `;
     const mdPath = join(CONTENT_DIR, newMdName);
