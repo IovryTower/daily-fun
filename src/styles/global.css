@@ -4,9 +4,9 @@
   --color-background: #FAFAFA;
   --color-surface: #FFFFFF;
   --color-text-primary: #1A1A1A;
-  --color-text-secondary: #6B7280;
-  --color-accent: #6366F1;
-  --color-accent-hover: #4F46E5;
+  --color-text-secondary: #52525B;
+  --color-accent: #4F46E5;
+  --color-accent-hover: #3730A3;
   --color-badge-bg: #EEF2FF;
   --color-border: #E5E7EB;
   --color-card-shadow: rgba(0, 0, 0, 0.08);
@@ -28,9 +28,9 @@
     --color-background: #0F0F0F;
     --color-surface: #1A1A1A;
     --color-text-primary: #F5F5F5;
-    --color-text-secondary: #9CA3AF;
+    --color-text-secondary: #A1A1AA;
     --color-accent: #818CF8;
-    --color-accent-hover: #6366F1;
+    --color-accent-hover: #A5B4FC;
     --color-badge-bg: #1E1B4B;
     --color-border: #374151;
     --color-card-shadow: rgba(0, 0, 0, 0.3);
