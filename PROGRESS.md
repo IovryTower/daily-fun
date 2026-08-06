@@ -66,9 +66,62 @@
 ## CI 配置
 
 - GitHub Secrets 需配置：
-  - `CLOUDFLARE_API_TOKEN`（Cloudflare Pages:Edit 权限）
-  - `CLOUDFLARE_ACCOUNT_ID`（URL 中的 Account ID）
+  - `CLOUDFLARE_API_TOKEN`（Cloudflare Pages:Edit 权限，Custom Token）
+  - `CLOUDFLARE_ACCOUNT_ID`（Dashboard URL 中的 ID）
 - CI 流程：build-github-pages → deploy-github-pages + deploy-cloudflare-pages（并行）
+- Cloudflare 部署方式：`npm install -g wrangler@4` + `wrangler pages deploy`
+
+## 关键技术决策
+
+### 多平台 base 路径适配
+- GitHub Pages 需要 `base: '/daily-fun'`，Cloudflare/Vercel 需要根路径
+- `astro.config.mts` 通过 `CF_PAGES`/`VERCEL` 环境变量动态切换
+- 所有组件链接用 `import.meta.env.BASE_URL` 替代硬编码 `/`
+
+### 版本时间显示
+- Footer 构建时间用 `timeZone: 'Asia/Shanghai'` 强制北京时间
+- CI 环境默认 UTC，不加时区参数会显示比北京时间慢 8 小时
+
+### 暗黑模式实现
+- CSS custom properties + `@variant dark (&:where(.dark, .dark *))`
+- ThemeToggle Island 通过 LocalStorage 持久化
+- BaseLayout 内联 script 防止闪烁（FOUC）
+
+## 踩坑记录
+
+### 1. pnpm-lock.yaml 中文镜像导致 CI 失败
+- **现象**：CI 中 `CERT_HAS_EXPIRED` 错误
+- **根因**：本地 pnpm 全局配置了 `r.cnpmjs.org`，lockfile 记录了这些 URL
+- **解决**：`pnpm config set registry https://registry.npmjs.org/` → 删除 lockfile → 重新生成
+- **验证**：`grep -c "cnpmjs\|npmmirror" pnpm-lock.yaml` 必须为 0
+
+### 2. npm 10 在 CI 中崩溃
+- **现象**：`npm ci` / `npm install` 报 "Exit handler never called"
+- **根因**：npm 10 + Node 22 的已知 bug
+- **解决**：CI 改用 pnpm
+
+### 3. Windows exFAT 不支持 symlink
+- **现象**：`pnpm install` 报 symlink 错误
+- **解决**：`.npmrc` 加 `node-linker=hoisted`；本地用 `npm install --ignore-scripts`
+
+### 4. Cloudflare Workers ≠ Cloudflare Pages
+- **现象**：部署到 Workers 后 CSS 404
+- **根因**：Workers 是运行 JS 的，Pages 才是静态站托管
+- **解决**：用 `wrangler pages project create` 创建 Pages 项目
+
+### 5. Cloudflare API Token 权限错误
+- **现象**：CI 中 wrangler/pages-action 部署失败
+- **根因**：Token 选了 "API Tokens:Edit" 而非 "Cloudflare Pages:Edit"
+- **解决**：创建 Custom Token，权限选 Account → Cloudflare Pages → Edit
+
+### 6. wrangler-action 和 pages-action 在 CI 中失败
+- **现象**：`cloudflare/wrangler-action@v3` 和 `cloudflare/pages-action@v1` 都失败
+- **解决**：直接 `npm install -g wrangler@4` + `wrangler pages deploy` 命令行部署
+
+### 7. GitHub/Vercel 国内被墙
+- **现象**：`ERR_CONNECTION_RESET` / `Failed to connect to port 443`
+- **根因**：SNI 阻断 + DNS 污染，`github.io` 和 `vercel.app` 域名被干扰
+- **解决**：使用 Cloudflare Pages（`pages.dev` 域名国内可直连）
 
 ## 日常操作
 
@@ -92,6 +145,7 @@ node node_modules/wrangler/bin/wrangler.js pages deploy dist --project-name dail
 - Windows exFAT 不支持 symlink，本地必须 `npm install --ignore-scripts`
 - 本地构建需 `node node_modules/astro/bin/astro.mjs build`（cmd 子进程找不到 node）
 - GitHub / Vercel 国内需 VPN 访问，推荐使用 Cloudflare Pages
+- GitHub 网络间歇性不通（SNI 阻断），git push 需多次重试
 
 ---
 *最后更新：2026-08-06*
