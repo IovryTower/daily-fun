@@ -25,6 +25,7 @@ const { items } = Astro.props;
 <div class="flex flex-col gap-6">
   {items.map((item) => (
     <FunCard
+      itemId={item.id}
       title={item.data.title}
       date={item.data.date}
       category={item.data.category}

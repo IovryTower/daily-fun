@@ -3,6 +3,7 @@ import CategoryBadge from './CategoryBadge.astro';
 import TagList from './TagList.astro';
 
 interface Props {
+  itemId: string;
   title: string;
   date: Date;
   category: string;
@@ -13,7 +14,7 @@ interface Props {
   body?: any;
 }
 
-const { title, date, category, tags, image, imageAlt, description } = Astro.props;
+const { itemId, title, date, category, tags, image, imageAlt, description } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 const isTextOnly = !image && (category === 'joke' || category === 'quote');
@@ -54,5 +55,87 @@ const isImageCard = !!image;
 
   <div class="flex items-center justify-between">
     <TagList tags={tags} />
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        class="like-btn flex items-center gap-1 rounded-md bg-badge-bg px-2 py-0.5 text-xs text-text-secondary transition-colors hover:bg-accent hover:text-white"
+        data-id={itemId}
+        aria-label="点赞"
+      >
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 9V5a3 3 0 00-3-3l-1.5 4.5L5 9v10a2 2 0 002 2h8a2 2 0 002-2v-6l-3-2z"/></svg>
+        <span class="like-count">0</span>
+      </button>
+      <button
+        type="button"
+        class="bookmark-btn flex items-center gap-1 rounded-md bg-badge-bg px-2 py-0.5 text-xs text-text-secondary transition-colors hover:bg-accent hover:text-white"
+        data-id={itemId}
+        aria-label="收藏"
+      >
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+        <span class="bookmark-count">0</span>
+      </button>
+    </div>
   </div>
 </article>
+
+<script>
+function initInteractions() {
+  const STORAGE_KEY = 'daily-fun-interactions';
+  function getData() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"likes":[],"bookmarks":[]}'); }
+    catch { return { likes: [], bookmarks: [] }; }
+  }
+  function saveData(data: { likes: string[]; bookmarks: string[] }) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  document.querySelectorAll<HTMLElement>('.like-btn').forEach(btn => {
+    const id = btn.dataset.id!;
+    const countEl = btn.querySelector('.like-count')!;
+    const data = getData();
+    const liked = data.likes.includes(id);
+    if (liked) {
+      countEl.textContent = '1';
+      btn.classList.add('!bg-accent', '!text-white');
+    }
+    btn.addEventListener('click', () => {
+      const d = getData();
+      if (d.likes.includes(id)) {
+        d.likes = d.likes.filter((x: string) => x !== id);
+        countEl.textContent = '0';
+        btn.classList.remove('!bg-accent', '!text-white');
+      } else {
+        d.likes.push(id);
+        countEl.textContent = '1';
+        btn.classList.add('!bg-accent', '!text-white');
+      }
+      saveData(d);
+    });
+  });
+
+  document.querySelectorAll<HTMLElement>('.bookmark-btn').forEach(btn => {
+    const id = btn.dataset.id!;
+    const countEl = btn.querySelector('.bookmark-count')!;
+    const data = getData();
+    const bookmarked = data.bookmarks.includes(id);
+    if (bookmarked) {
+      countEl.textContent = '1';
+      btn.classList.add('!bg-amber-500', '!text-white');
+    }
+    btn.addEventListener('click', () => {
+      const d = getData();
+      if (d.bookmarks.includes(id)) {
+        d.bookmarks = d.bookmarks.filter((x: string) => x !== id);
+        countEl.textContent = '0';
+        btn.classList.remove('!bg-amber-500', '!text-white');
+      } else {
+        d.bookmarks.push(id);
+        countEl.textContent = '1';
+        btn.classList.add('!bg-amber-500', '!text-white');
+      }
+      saveData(d);
+    });
+  });
+}
+initInteractions();
+</script>
