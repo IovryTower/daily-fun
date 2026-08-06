@@ -87,11 +87,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          echo "Account ID length: ${#CLOUDFLARE_ACCOUNT_ID}"
-          echo "Token length: ${#CLOUDFLARE_API_TOKEN}"
-          echo "Token prefix: ${CLOUDFLARE_API_TOKEN:0:6}..."
-          wrangler pages deploy dist --project-name daily-fun 2>&1 || true
-          echo "--- Verifying dist contents ---"
-          ls -la dist/ | head -5
-          ls -la dist/_astro/ | head -5
+        run: wrangler pages deploy dist --project-name daily-fun
