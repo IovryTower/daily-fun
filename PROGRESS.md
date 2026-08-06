@@ -50,18 +50,15 @@
 - [x] 操作指南 `scripts/SYNC-GUIDE.md`
 - [x] 本地构建脚本 `scripts/prebuild.mjs`
 
-## 当前内容
+## 当前内容 (22 条)
 
-| 文件 | 类型 | 有图 | 日期 |
-|------|------|------|------|
-| 2026-08-06-meme-1.md | meme | ✅ | 08-06 |
-| 2026-08-06-meme-2.md | meme | ✅ | 08-06 |
-| 2026-08-04-simple-requirement.md | meme | ✅ | 08-04 |
-| 2026-08-03-if-else.md | joke | ❌ | 08-03 |
-| 2026-08-03-meme-of-the-day.md | meme | ✅ | 08-03 |
-| 2026-08-02-effort.md | quote | ❌ | 08-02 |
-| 2026-08-01-cat-cucumber.md | gif | ✅ | 08-01 |
-| 2026-07-31-monday-morning.md | image | ✅ | 07-31 |
+| 类型 | 数量 | 说明 |
+|------|------|------|
+| meme | 8 | 梗图（纯图片卡片） |
+| joke | 10 | 笑话/谐音梗（blockquote 卡片） |
+| quote | 1 | 趣句（blockquote 卡片） |
+| gif | 1 | 动图（图片卡片） |
+| image | 2 | 趣图/xkcd（图片卡片） |
 
 ## 部署架构
 
@@ -138,7 +135,7 @@ node scripts/prebuild.mjs && node node_modules/astro/bin/astro.mjs build
 5. **API Token 权限** → Custom Token 选 Pages:Edit
 6. **wrangler-action CI 失败** → 改用全局安装 wrangler CLI
 7. **GitHub/Vercel 被墙** → Cloudflare Pages 国内直连
-8. **Cloudflare CI 不稳定** → 本地 wrangler 手动部署作为备选
+9. **sync-images 日期/命名冲突** → 手动处理 templates md+图片，脚本仅处理纯图片
 
 ---
-*最后更新：2026-08-06 (Phase 4 完成，进入 Phase 5)*
+*最后更新：2026-08-06 (Phase 4 完成 + 22条内容 + Cloudflare手动部署)*
