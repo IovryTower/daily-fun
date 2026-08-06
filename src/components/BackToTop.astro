@@ -1,0 +1,25 @@
+---
+---
+
+<button
+  id="back-to-top"
+  type="button"
+  aria-label="回到顶部"
+  class="fixed right-4 bottom-6 z-40 hidden rounded-full bg-accent p-2.5 text-white shadow-lg transition-all hover:bg-accent-hover hover:shadow-xl"
+>
+  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+  </svg>
+</button>
+
+<script>
+const btn = document.getElementById('back-to-top');
+if (btn) {
+  window.addEventListener('scroll', () => {
+    btn.classList.toggle('hidden', window.scrollY < 300);
+  });
+  btn.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+}
+</script>

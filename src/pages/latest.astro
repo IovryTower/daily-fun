@@ -5,9 +5,39 @@ import { getCollection } from 'astro:content';
 
 const allFun = await getCollection('fun');
 const sortedFun = allFun.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+const PAGE_SIZE = 6;
+const pageData = sortedFun.slice(0, PAGE_SIZE);
+const lastPage = Math.ceil(sortedFun.length / PAGE_SIZE);
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
-<BaseLayout title="最新" description="最新发布的搞笑内容">
-  <h1 class="mb-8 text-2xl font-bold text-text-primary">最新</h1>
-  <FunFeed items={sortedFun} />
+<BaseLayout title="最新 - Daily Fun" description="最新发布的搞笑内容">
+  <section class="mb-8">
+    <h1 class="text-2xl font-bold text-text-primary">最新</h1>
+    <p class="mt-1 text-sm text-text-secondary">按发布时间倒序浏览</p>
+  </section>
+  <FunFeed items={pageData} />
+  {lastPage > 1 && (
+    <nav class="mt-8 flex items-center justify-center gap-1" aria-label="分页导航">
+      {Array.from({ length: lastPage }, (_, i) => i + 1).map(p => (
+        <a
+          href={p === 1 ? `${base}/latest` : `${base}/latest/${p}`}
+          class:list={[
+            'rounded-md px-3 py-1.5 text-sm transition-colors',
+            p === 1
+              ? 'bg-accent text-white'
+              : 'bg-badge-bg text-text-secondary hover:bg-accent hover:text-white',
+          ]}
+        >
+          {p}
+        </a>
+      ))}
+      <a
+        href={`${base}/latest/2`}
+        class="rounded-md bg-badge-bg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-accent hover:text-white"
+      >
+        下一页 →
+      </a>
+    </nav>
+  )}
 </BaseLayout>

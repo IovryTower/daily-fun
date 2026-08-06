@@ -2,6 +2,7 @@
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import BackToTop from '../components/BackToTop.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -24,6 +25,7 @@ const { title, description, image } = Astro.props;
       <slot />
     </main>
     <Footer />
+    <BackToTop />
     <script is:inline>
       // 暗黑模式初始化（内联脚本避免闪烁）
       (function() {

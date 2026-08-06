@@ -3,23 +3,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import FunFeed from '../../components/FunFeed.astro';
 import { getCollection } from 'astro:content';
 
-export async function getStaticPaths() {
-  const allFun = await getCollection('fun');
-  const categories = [...new Set(allFun.map((item) => item.data.category))];
-
-  return categories.map((category) => ({
-    params: { category },
-    props: {
-      items: allFun
-        .filter((item) => item.data.category === category)
-        .sort((a, b) => b.data.date.getTime() - a.data.date.getTime()),
-    },
-  }));
-}
-
-const { category } = Astro.params;
-const { items } = Astro.props;
-
 const categoryLabels: Record<string, string> = {
   meme: '梗图',
   joke: '笑话',
@@ -29,15 +12,57 @@ const categoryLabels: Record<string, string> = {
   other: '其他',
 };
 
+export async function getStaticPaths() {
+  const allFun = await getCollection('fun');
+  const categories = [...new Set(allFun.map(item => item.data.category))];
+
+  return categories.map(cat => {
+    const items = allFun
+      .filter(item => item.data.category === cat)
+      .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+    return { params: { category: cat }, props: { items } };
+  });
+}
+
+const { category } = Astro.params;
+const { items } = Astro.props;
 const label = categoryLabels[category!] || category;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const PAGE_SIZE = 6;
+const pageData = items.slice(0, PAGE_SIZE);
+const lastPage = Math.ceil(items.length / PAGE_SIZE);
 ---
 
-<BaseLayout title={`${label} - 分类`} description={`浏览所有${label}内容`}>
-  <div class="mb-8 flex items-center gap-3">
-    <a href={`${base}/category`} class="text-sm text-text-secondary no-underline transition-colors hover:text-accent">← 全部分类</a>
-    <h1 class="text-2xl font-bold text-text-primary">{label}</h1>
-    <span class="text-sm text-text-secondary">({items.length})</span>
-  </div>
-  <FunFeed items={items} />
+<BaseLayout title={`${label} - Daily Fun`} description={`浏览${label}分类的搞笑内容`}>
+  <section class="mb-8">
+    <div class="flex items-center gap-3">
+      <a href={`${base}/category`} class="text-sm text-text-secondary no-underline transition-colors hover:text-accent">← 全部分类</a>
+      <h1 class="text-2xl font-bold text-text-primary">{label}</h1>
+      <span class="rounded-md bg-badge-bg px-2 py-0.5 text-xs text-accent">{items.length} 条</span>
+    </div>
+  </section>
+  <FunFeed items={pageData} />
+  {lastPage > 1 && (
+    <nav class="mt-8 flex items-center justify-center gap-1" aria-label="分页导航">
+      {Array.from({ length: lastPage }, (_, i) => i + 1).map(p => (
+        <a
+          href={p === 1 ? `${base}/category/${category}` : `${base}/category/${category}/${p}`}
+          class:list={[
+            'rounded-md px-3 py-1.5 text-sm transition-colors',
+            p === 1
+              ? 'bg-accent text-white'
+              : 'bg-badge-bg text-text-secondary hover:bg-accent hover:text-white',
+          ]}
+        >
+          {p}
+        </a>
+      ))}
+      <a
+        href={`${base}/category/${category}/2`}
+        class="rounded-md bg-badge-bg px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-accent hover:text-white"
+      >
+        下一页 →
+      </a>
+    </nav>
+  )}
 </BaseLayout>
