@@ -1,7 +1,8 @@
-// AI Pixel Cat — v4 (wander-first, proximity follow, sleep, combo, drag)
+// AI Pixel Cat — v5 (economy system: click-to-earn, auto-produce, exchange, upgrade)
 (function pixelCat() {
   "use strict";
 
+  // ========== DOM Setup ==========
   const el = document.createElement("div");
   el.id = "pixel-cat";
   el.ariaHidden = "true";
@@ -29,14 +30,59 @@
   particleWrap.style.cssText = "position:absolute;top:0;left:0;width:64px;height:64px;pointer-events:none;overflow:visible;";
   el.appendChild(particleWrap);
 
-  // Inject animations
+  // Click +1 floating text container
+  const floatWrap = document.createElement("div");
+  floatWrap.style.cssText = "position:absolute;top:0;left:0;width:64px;height:64px;pointer-events:none;overflow:visible;";
+  el.appendChild(floatWrap);
+
+  // ========== Currency Display ==========
+  const currencyBar = document.createElement("div");
+  currencyBar.style.cssText = "position:fixed;top:12px;right:12px;z-index:999;background:var(--color-surface);color:var(--color-text-primary);padding:10px 16px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.12);font-size:13px;line-height:1.8;pointer-events:none;backdrop-filter:blur(8px);border:1px solid var(--color-border,rgba(255,255,255,.1));";
+  currencyBar.innerHTML = '<div id="cat-currency-display"></div>';
+  document.body.appendChild(currencyBar);
+
+  // ========== Shop Panel ==========
+  const shopBtn = document.createElement("div");
+  shopBtn.style.cssText = "position:fixed;bottom:12px;right:12px;z-index:999;width:44px;height:44px;background:var(--color-surface);color:var(--color-text-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.15);border:1px solid var(--color-border,rgba(255,255,255,.1));transition:transform .2s;";
+  shopBtn.textContent = "🛒";
+  shopBtn.onmouseenter = () => shopBtn.style.transform = "scale(1.1)";
+  shopBtn.onmouseleave = () => shopBtn.style.transform = "scale(1)";
+  document.body.appendChild(shopBtn);
+
+  const shopPanel = document.createElement("div");
+  shopPanel.style.cssText = "position:fixed;bottom:64px;right:12px;z-index:999;width:280px;max-height:70vh;overflow-y:auto;background:var(--color-surface);color:var(--color-text-primary);border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.2);padding:16px;display:none;font-size:12px;border:1px solid var(--color-border,rgba(255,255,255,.1));backdrop-filter:blur(8px);";
+  shopPanel.innerHTML = '<div id="cat-shop-content"></div>';
+  document.body.appendChild(shopPanel);
+
+  let shopOpen = false;
+  shopBtn.onclick = (e) => {
+    e.stopPropagation();
+    shopOpen = !shopOpen;
+    shopPanel.style.display = shopOpen ? "block" : "none";
+    if (shopOpen) renderShop();
+  };
+
+  // ========== Inject Animations ==========
   const style = document.createElement("style");
   style.textContent = [
     "@keyframes zFloat{0%{transform:translate(0,0) scale(.6);opacity:0}30%{opacity:1}100%{transform:translate(6px,-18px) scale(1);opacity:0}}",
     "@keyframes particleBurst{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--px),var(--py)) scale(0);opacity:0}}",
+    "@keyframes floatUp{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-30px);opacity:0}}",
+    "@keyframes shopItemHover{0%{background-position:0% 50%}100%{background-position:100% 50%}}",
+    "#cat-shop-content .shop-section{margin-bottom:12px}",
+    "#cat-shop-content .shop-title{font-size:13px;font-weight:700;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--color-border,rgba(255,255,255,.1))}",
+    "#cat-shop-content .shop-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin:4px 0;border-radius:8px;cursor:pointer;transition:background .2s;gap:6px}",
+    "#cat-shop-content .shop-item:hover{background:var(--color-border,rgba(255,255,255,.08))}",
+    "#cat-shop-content .shop-item.disabled{opacity:.4;cursor:not-allowed}",
+    "#cat-shop-content .shop-item .item-info{flex:1;min-width:0}",
+    "#cat-shop-content .shop-item .item-name{font-weight:600;font-size:12px}",
+    "#cat-shop-content .shop-item .item-desc{font-size:10px;opacity:.7}",
+    "#cat-shop-content .shop-item .item-cost{font-size:11px;white-space:nowrap;font-weight:600}",
+    "#cat-shop-content .shop-item .item-owned{font-size:10px;opacity:.6;margin-left:4px}",
   ].join("");
   document.head.appendChild(style);
 
+  // ========== Canvas Drawing ==========
   const ctx = canvas.getContext("2d");
   ctx.imageSmoothingEnabled = false;
 
@@ -55,7 +101,7 @@
     sparkle: "#fff",
   };
 
-  // Position
+  // ========== Position & State ==========
   let catX = window.innerWidth - 100;
   let catY = window.innerHeight - 100;
   let mouseX = catX;
@@ -64,59 +110,309 @@
   let lastTs = 0;
   let facing = 1;
 
-  // Behavior state machine
-  // idle → wander → idle → ... → drowsy → sleep
-  // mouse nearby → follow → mouse leaves → idle
-  // click/drag interrupts everything
-  let behavior = "idle"; // idle, follow, wander, sleep
-  let state = "sit";     // sit, wash, stretch, belly, sniff, lick, roll, yawn, puff, drag, sleep
+  let behavior = "idle";
+  let state = "sit";
   let stateTimer = 0;
-  let idleTime = 0;      // time since last interaction (click/drag)
+  let idleTime = 0;
   let idleActionCooldown = 0;
 
-  // Sleep
-  let sleepPhase = 0;    // 0=awake, 1=drowsy, 2=asleep
+  let sleepPhase = 0;
   let wakeAnim = 0;
 
-  // Wander
   let wanderTargetX = catX;
   let wanderTargetY = catY;
   let wanderPause = 0;
   let wanderSegment = 0;
-  let wanderCooldown = 0; // minimum idle time before next wander
+  let wanderCooldown = 0;
 
-  // Drag
   let isDragging = false;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
   let wasDragged = false;
 
-  // Double-click combo
   let lastClickTime = 0;
   let comboCount = 0;
   let comboTimer = 0;
 
-  // Landing bounce
   let landBounce = 0;
-
-  // Zzz
   let zzzTimer = 0;
 
-  // Proximity thresholds
-  const FOLLOW_DIST = 150;  // mouse within this → follow
-  const CLOSE_DIST = 40;    // mouse this close → stop following, just idle
+  const FOLLOW_DIST = 150;
+  const CLOSE_DIST = 40;
 
+  // ========== Economy System ==========
+  const SAVE_KEY = "pixelCatEconomy";
+
+  // Upgrade definitions
+  const UPGRADES = {
+    // Auto-produce upgrades (cost: catFood)
+    autoProduce: [
+      { name: "打工猫", desc: "+1 猫粮/秒", rate: 1, cost: 50, say: "打工啦~" },
+      { name: "勤劳猫", desc: "+2 猫粮/秒", rate: 2, cost: 200, say: "更努力了!" },
+      { name: "猫经理", desc: "+5 猫粮/秒", rate: 5, cost: 800, say: "我升职了!" },
+      { name: "猫老板", desc: "+12 猫粮/秒", rate: 12, cost: 3000, say: "我是老板!" },
+      { name: "猫首富", desc: "+30 猫粮/秒", rate: 30, cost: 10000, say: "富可敌国!" },
+    ],
+    // Click power upgrades (cost: catTreat)
+    clickPower: [
+      { name: "美味猫条", desc: "点击 +2 猫粮", power: 2, cost: 5, say: "好吃~" },
+      { name: "豪华猫条", desc: "点击 +5 猫粮", power: 5, cost: 20, say: "太香了!" },
+      { name: "顶级猫条", desc: "点击 +12 猫粮", power: 12, cost: 80, say: "人间美味!" },
+    ],
+    // Multiplier upgrades (cost: catCan)
+    multiplier: [
+      { name: "金枪鱼罐头", desc: "全部产出 x2", mult: 2, cost: 3, say: "高级货!" },
+      { name: "龙虾罐头", desc: "全部产出 x3", mult: 3, cost: 10, say: "奢华!" },
+      { name: "鱼子酱罐头", desc: "全部产出 x5", mult: 5, cost: 30, say: "顶级享受!" },
+    ],
+  };
+
+  // Exchange rates
+  const EXCHANGE = {
+    foodToTreat: { from: "catFood", fromAmt: 100, to: "catTreat", toAmt: 1, say: "换到猫条了!" },
+    treatToCan: { from: "catTreat", fromAmt: 100, to: "catCan", toAmt: 1, say: "换到罐头了!" },
+  };
+
+  let eco = loadEconomy();
+
+  function defaultEconomy() {
+    return {
+      catFood: 0,
+      catTreat: 0,
+      catCan: 0,
+      autoLevel: 0,    // index into UPGRADES.autoProduce
+      clickLevel: 0,   // index into UPGRADES.clickPower
+      multLevel: 0,    // index into UPGRADES.multiplier
+      totalFoodEarned: 0,
+    };
+  }
+
+  function loadEconomy() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        return { ...defaultEconomy(), ...d };
+      }
+    } catch (e) { /* ignore */ }
+    return defaultEconomy();
+  }
+
+  function saveEconomy() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(eco));
+    } catch (e) { /* ignore */ }
+  }
+
+  function getAutoRate() {
+    let rate = 0;
+    for (let i = 0; i < eco.autoLevel; i++) rate += UPGRADES.autoProduce[i].rate;
+    return rate;
+  }
+
+  function getClickPower() {
+    return 1 + (eco.clickLevel > 0 ? UPGRADES.clickPower[eco.clickLevel - 1].power : 0);
+  }
+
+  function getMultiplier() {
+    return eco.multLevel > 0 ? UPGRADES.multiplier[eco.multLevel - 1].mult : 1;
+  }
+
+  function getEffectiveAutoRate() {
+    return getAutoRate() * getMultiplier();
+  }
+
+  function getEffectiveClickPower() {
+    return getClickPower() * getMultiplier();
+  }
+
+  // Auto-produce accumulator (sub-second precision)
+  let autoAccum = 0;
+
+  function tickEconomy(dt) {
+    const rate = getEffectiveAutoRate();
+    if (rate > 0) {
+      autoAccum += rate * dt / 1000;
+      if (autoAccum >= 1) {
+        const earned = Math.floor(autoAccum);
+        eco.catFood += earned;
+        eco.totalFoodEarned += earned;
+        autoAccum -= earned;
+      }
+    }
+  }
+
+  // ========== Currency Display ==========
+  function updateCurrencyDisplay() {
+    const d = document.getElementById("cat-currency-display");
+    if (!d) return;
+    const autoRate = getEffectiveAutoRate();
+    const clickPwr = getEffectiveClickPower();
+    const mult = getMultiplier();
+    d.innerHTML =
+      `<div>🐾 <b>${fmtNum(eco.catFood)}</b> 猫粮${autoRate > 0 ? ` <span style="opacity:.6;font-size:10px">(+${autoRate}/秒)</span>` : ""}</div>` +
+      `<div>🍖 <b>${fmtNum(eco.catTreat)}</b> 猫条</div>` +
+      `<div>🥫 <b>${fmtNum(eco.catCan)}</b> 猫罐头</div>` +
+      `<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--color-border,rgba(255,255,255,.1));font-size:10px;opacity:.6">` +
+      `点击 +${clickPwr} | 倍率 x${mult}</div>`;
+  }
+
+  function fmtNum(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+    return n;
+  }
+
+  // ========== Shop Rendering ==========
+  function renderShop() {
+    const c = document.getElementById("cat-shop-content");
+    if (!c) return;
+
+    let html = "";
+
+    // Exchange section
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">💱 兑换</div>';
+    for (const key of Object.keys(EXCHANGE)) {
+      const ex = EXCHANGE[key];
+      const canAfford = eco[ex.from] >= ex.fromAmt;
+      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="exchange" data-key="${key}">` +
+        `<div class="item-info"><div class="item-name">${ex.fromAmt} 🐾 → ${ex.toAmt} ${ex.to === "catTreat" ? "🍖" : "🥫"}</div>` +
+        `<div class="item-desc">${ex.from === "catFood" ? "猫粮换猫条" : "猫条换猫罐头"}</div></div>` +
+        `<div class="item-cost">${ex.fromAmt} 🐾</div></div>`;
+    }
+    html += '</div>';
+
+    // Auto-produce upgrades
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">⚙️ 自动产出</div>';
+    if (eco.autoLevel < UPGRADES.autoProduce.length) {
+      const up = UPGRADES.autoProduce[eco.autoLevel];
+      const canAfford = eco.catFood >= up.cost;
+      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="autoProduce">` +
+        `<div class="item-info"><div class="item-name">${up.name}</div>` +
+        `<div class="item-desc">${up.desc}</div></div>` +
+        `<div class="item-cost">${fmtNum(up.cost)} 🐾</div></div>`;
+    } else {
+      html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
+    }
+    if (eco.autoLevel > 0) {
+      html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: +${getAutoRate()}/秒 (x${getMultiplier()} = +${getEffectiveAutoRate()}/秒)</div>`;
+    }
+    html += '</div>';
+
+    // Click power upgrades
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">👆 点击加成</div>';
+    if (eco.clickLevel < UPGRADES.clickPower.length) {
+      const up = UPGRADES.clickPower[eco.clickLevel];
+      const canAfford = eco.catTreat >= up.cost;
+      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="clickPower">` +
+        `<div class="item-info"><div class="item-name">${up.name}</div>` +
+        `<div class="item-desc">${up.desc}</div></div>` +
+        `<div class="item-cost">${up.cost} 🍖</div></div>`;
+    } else {
+      html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
+    }
+    if (eco.clickLevel > 0) {
+      html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: 点击 +${getClickPower()} (x${getMultiplier()} = +${getEffectiveClickPower()})</div>`;
+    }
+    html += '</div>';
+
+    // Multiplier upgrades
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">🥫 产出倍率</div>';
+    if (eco.multLevel < UPGRADES.multiplier.length) {
+      const up = UPGRADES.multiplier[eco.multLevel];
+      const canAfford = eco.catCan >= up.cost;
+      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="multiplier">` +
+        `<div class="item-info"><div class="item-name">${up.name}</div>` +
+        `<div class="item-desc">${up.desc}</div></div>` +
+        `<div class="item-cost">${up.cost} 🥫</div></div>`;
+    } else {
+      html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
+    }
+    if (eco.multLevel > 0) {
+      html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: x${getMultiplier()}</div>`;
+    }
+    html += '</div>';
+
+    // Stats
+    html += '<div style="font-size:10px;opacity:.4;text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border,rgba(255,255,255,.1))">' +
+      `累计赚取 ${fmtNum(eco.totalFoodEarned)} 猫粮</div>`;
+
+    c.innerHTML = html;
+
+    // Bind click events
+    c.querySelectorAll(".shop-item:not(.disabled)").forEach(item => {
+      item.onclick = (e) => {
+        e.stopPropagation();
+        const action = item.dataset.action;
+        if (action === "exchange") doExchange(item.dataset.key);
+        else if (action === "upgrade") doUpgrade(item.dataset.type);
+      };
+    });
+  }
+
+  function doExchange(key) {
+    const ex = EXCHANGE[key];
+    if (eco[ex.from] < ex.fromAmt) return;
+    eco[ex.from] -= ex.fromAmt;
+    eco[ex.to] += ex.toAmt;
+    say(ex.say);
+    spawnParticles("star");
+    saveEconomy();
+    renderShop();
+  }
+
+  function doUpgrade(type) {
+    const list = UPGRADES[type];
+    let levelKey;
+    if (type === "autoProduce") levelKey = "autoLevel";
+    else if (type === "clickPower") levelKey = "clickLevel";
+    else if (type === "multiplier") levelKey = "multLevel";
+    else return;
+
+    const lvl = eco[levelKey];
+    if (lvl >= list.length) return;
+    const up = list[lvl];
+
+    // Check currency
+    let currencyKey;
+    if (type === "autoProduce") currencyKey = "catFood";
+    else if (type === "clickPower") currencyKey = "catTreat";
+    else if (type === "multiplier") currencyKey = "catCan";
+    else return;
+
+    if (eco[currencyKey] < up.cost) return;
+    eco[currencyKey] -= up.cost;
+    eco[levelKey]++;
+
+    say(up.say);
+    spawnParticles(type === "autoProduce" ? "sparkle" : type === "clickPower" ? "heart" : "star");
+    saveEconomy();
+    renderShop();
+  }
+
+  // ========== Click +1 Float ==========
+  function showFloatText(text) {
+    const f = document.createElement("span");
+    f.textContent = text;
+    f.style.cssText = "position:absolute;left:20px;top:10px;font-size:14px;font-weight:700;color:#ffd700;pointer-events:none;animation:floatUp .8s ease-out forwards;text-shadow:0 1px 3px rgba(0,0,0,.3);";
+    floatWrap.appendChild(f);
+    setTimeout(() => f.remove(), 800);
+  }
+
+  // ========== Drawing ==========
   function box(x, y, w, h, col) {
     ctx.fillStyle = col;
     ctx.fillRect(x, y, w, h);
   }
 
-  // --- Drawing ---
   function drawCat() {
     ctx.clearRect(0, 0, 64, 64);
     ctx.save();
 
-    // Breathing
     let b = 0;
     if (sleepPhase >= 2) {
       b = Math.sin(frame / 30) * 2;
@@ -129,7 +425,6 @@
     }
     ctx.translate(0, b);
 
-    // Landing bounce
     if (landBounce > 0) {
       const t = landBounce / 300;
       const sy = 1 - Math.sin(t * Math.PI) * 0.3;
@@ -139,7 +434,6 @@
       ctx.translate(-32, -64);
     }
 
-    // Drag shake
     if (state === "drag") {
       ctx.translate(Math.sin(frame * 0.8) * 1.5, 0);
     }
@@ -171,7 +465,7 @@
     // M marking
     [[25, 17], [28, 19], [36, 17], [33, 19]].forEach(p => box(p[0], p[1], 3, 3, C.stripe));
 
-    // Eyes — always track mouse visually
+    // Eyes
     const dx = mouseX - catX;
     const dy = mouseY - catY;
     const ox = Math.max(-2, Math.min(2, dx / 80));
@@ -259,7 +553,7 @@
     ctx.restore();
   }
 
-  // --- Speech bubble ---
+  // ========== Speech Bubble ==========
   let sayTimeout = null;
   function say(t) {
     sayEl.textContent = t;
@@ -272,7 +566,7 @@
     }, 2000);
   }
 
-  // --- Zzz ---
+  // ========== Zzz ==========
   function updateZzz(dt) {
     if (sleepPhase >= 2) {
       zzzWrap.style.display = "block";
@@ -294,7 +588,7 @@
     }
   }
 
-  // --- Particles ---
+  // ========== Particles ==========
   function spawnParticles(type) {
     const count = type === "heart" ? 5 : type === "star" ? 6 : 4;
     for (let i = 0; i < count; i++) {
@@ -310,7 +604,7 @@
     }
   }
 
-  // --- Wander ---
+  // ========== Wander ==========
   function pickWanderTarget() {
     const margin = 80;
     const range = 100 + Math.random() * 200;
@@ -328,7 +622,7 @@
     pickWanderTarget();
   }
 
-  // --- Wake up ---
+  // ========== Wake / Sleep ==========
   function wakeUp() {
     if (sleepPhase === 0) return;
     sleepPhase = 0;
@@ -339,7 +633,6 @@
     idleTime = 0;
   }
 
-  // --- Enter sleep ---
   function enterSleep() {
     sleepPhase = 1;
     say("好困...");
@@ -352,7 +645,7 @@
     }, 2000);
   }
 
-  // --- Pointer events ---
+  // ========== Pointer Events ==========
   function onPointerDown(e) {
     e.stopPropagation();
     e.preventDefault();
@@ -401,12 +694,19 @@
   document.addEventListener("pointermove", onPointerMove, { passive: true });
   document.addEventListener("pointerup", onPointerUp, { passive: true });
 
-  // --- Click / double-click combo ---
+  // ========== Click / Combo + Economy ==========
   el.addEventListener("click", (e) => {
     e.stopPropagation();
     if (wasDragged) return;
 
     if (sleepPhase >= 1) { wakeUp(); return; }
+
+    // Economy: earn cat food on click
+    const earned = getEffectiveClickPower();
+    eco.catFood += earned;
+    eco.totalFoodEarned += earned;
+    showFloatText(`+${earned} 🐾`);
+    saveEconomy();
 
     const now = Date.now();
     if (now - lastClickTime < 400) {
@@ -441,7 +741,7 @@
     idleTime = 0;
   });
 
-  // Track mouse position (for eye follow + proximity check)
+  // Track mouse position
   document.addEventListener("mousemove", e => {
     mouseX = e.clientX;
     mouseY = e.clientY;
@@ -454,11 +754,24 @@
     }
   }, { passive: true });
 
-  // --- Main loop ---
+  // ========== Main Loop ==========
+  let currencyUpdateTimer = 0;
+
   function tick(ts) {
     if (!lastTs) lastTs = ts;
     const dt = Math.min(ts - lastTs, 100);
     lastTs = ts;
+
+    // Economy tick
+    tickEconomy(dt);
+
+    // Update currency display (throttled)
+    currencyUpdateTimer += dt;
+    if (currencyUpdateTimer > 500) {
+      currencyUpdateTimer = 0;
+      updateCurrencyDisplay();
+      if (shopOpen) renderShop();
+    }
 
     // Combo decay
     if (comboTimer > 0) {
@@ -466,7 +779,7 @@
       if (comboTimer <= 0) comboCount = 0;
     }
 
-    // State timer (for timed actions like wash, stretch, etc.)
+    // State timer
     if (stateTimer > 0) {
       stateTimer -= dt;
       if (stateTimer <= 0 && state !== "drag" && state !== "sleep" && sleepPhase === 0) {
@@ -492,30 +805,25 @@
     // Wander cooldown
     if (wanderCooldown > 0) wanderCooldown -= dt;
 
-    // --- Behavior logic (only when not dragging) ---
+    // --- Behavior logic ---
     if (!isDragging) {
       const dx = mouseX - catX;
       const dy = mouseY - catY;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // Proximity check: mouse nearby interrupts sleep/wander
       if (dist < FOLLOW_DIST && sleepPhase >= 1) {
         wakeUp();
       }
 
-      // Determine behavior based on mouse proximity and current state
       if (sleepPhase >= 2) {
-        // Sleeping — don't move
         behavior = "sleep";
       } else if (dist < CLOSE_DIST) {
-        // Mouse very close — just sit and look at it
         if (behavior === "follow") {
           behavior = "idle";
           state = "sit";
         }
         idleTime += dt;
       } else if (dist < FOLLOW_DIST) {
-        // Mouse nearby — follow it
         if (behavior !== "follow") {
           behavior = "follow";
           if (state === "sit" || state === "wash" || state === "stretch" || state === "sniff" || state === "lick") {
@@ -529,16 +837,13 @@
         facing = dx > 0 ? 1 : -1;
         idleTime = 0;
       } else {
-        // Mouse far away — cat does its own thing
         idleTime += dt;
 
         if (behavior === "follow") {
-          // Mouse just left proximity — go back to idle
           behavior = "idle";
           state = "sit";
         }
 
-        // Idle actions
         if (sleepPhase === 0 && state === "sit" && idleActionCooldown <= 0 && idleTime > 3000 && idleTime < 12000) {
           const actions = ["wash", "stretch", "sniff", "lick"];
           state = actions[Math.floor(Math.random() * actions.length)];
@@ -548,12 +853,10 @@
           idleActionCooldown = 6000;
         }
 
-        // Start wandering
         if (sleepPhase === 0 && behavior !== "wander" && wanderCooldown <= 0 && idleTime > 5000) {
           startWander();
         }
 
-        // Sleep progression
         if (idleTime > 20000 && sleepPhase === 0 && state === "sit" && behavior !== "wander") {
           enterSleep();
         }
@@ -597,7 +900,6 @@
       }
     }
 
-    // Update Zzz
     updateZzz(dt);
 
     // Keep in viewport
@@ -613,5 +915,7 @@
     requestAnimationFrame(tick);
   }
 
+  // Initial display
+  updateCurrencyDisplay();
   requestAnimationFrame(tick);
 })();
