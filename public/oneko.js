@@ -165,9 +165,12 @@
   // Mood system
   let mood = 80; // 0-100, starts happy (will be overridden by eco.mood if saved)
   let moodDecayTimer = 0;
-  const MOOD_DECAY_INTERVAL = 5000; // lose 1 mood every 5s idle
-  const MOOD_CLICK_BOOST = 5;
+  const MOOD_DECAY_INTERVAL = 3000; // lose 1 mood every 3s idle
+  const MOOD_CLICK_BOOST = 2;
+  const MOOD_CLICK_COOLDOWN = 3000; // 3s between mood gains from clicking
+  let lastMoodClickTime = 0;
   const MOOD_FEED_BOOST = 15; // feeding via shop
+  let catnipBuff = 0; // catnip production buff countdown (ms)
 
   // Contextual dialogue
   let dialogueTimer = 0;
@@ -227,6 +230,67 @@
     { id: "wizhat",   name: "🪄 魔法帽", cost: 5, desc: "巫师帽+魔法粒子" },
   ];
 
+  const SKILLS = [
+    { id: "skillHunt",  name: "🎯 精准捕猎", levels: [
+      { desc: "点击产出 +10%", bonus: 0.1, cost: 2, say: "爪子更准了!" },
+      { desc: "点击产出 +20%", bonus: 0.2, cost: 5, say: "百发百中!" },
+      { desc: "点击产出 +30%", bonus: 0.3, cost: 10, say: "神之一爪!" },
+    ]},
+    { id: "skillLuck",  name: "🍀 幸运体质", levels: [
+      { desc: "事件间隔 -10%", bonus: 0.1, cost: 2, say: "运气变好了!" },
+      { desc: "事件间隔 -20%", bonus: 0.2, cost: 5, say: "好运连连!" },
+      { desc: "事件间隔 -30%", bonus: 0.3, cost: 10, say: "天选之猫!" },
+    ]},
+    { id: "skillSleep", name: "💤 优质睡眠", levels: [
+      { desc: "离线效率 60%", bonus: 0.1, cost: 3, say: "睡得更香了!" },
+      { desc: "离线效率 70%", bonus: 0.2, cost: 8, say: "美梦成真!" },
+      { desc: "离线效率 80%", bonus: 0.3, cost: 15, say: "睡神降临!" },
+    ]},
+  ];
+
+  // ── Config: Real Estate ──
+  const REAL_ESTATE = [
+    { id: "nest",     name: "🏠 小窝",       cost: 50000,     desc: "自动心情恢复+1/10秒",              say: "有家了!" },
+    { id: "garden",   name: "🌳 猫薄荷园",   cost: 200000,    desc: "每5分钟自动猫薄荷效果(免费)",       say: "薄荷自由!" },
+    { id: "shop",     name: "🏪 猫粮商店",   cost: 1000000,   desc: "兑换优化：80猫粮→1猫条",           say: "开店啦!" },
+    { id: "castle",   name: "🏰 猫咪城堡",   cost: 5000000,   desc: "全部产出+25%",                     say: "朕的城堡!" },
+    { id: "planet",   name: "🌌 猫咪星球",   cost: 50000000,  desc: "全部产出+50%，解锁星际猫外观",      say: "星球领主!" },
+  ];
+
+  // ── Config: Gacha ──
+  const GACHA_NORMAL_COST = 2;
+  const GACHA_PREMIUM_COST = 10;
+  const GACHA_SHARDS = [
+    { id: "rainbow", name: "🌈 彩虹猫",  pieces: 10, desc: "七彩光芒环绕" },
+    { id: "ghost",   name: "👻 幽灵猫",  pieces: 10, desc: "半透明幽灵形态" },
+    { id: "flame",   name: "🔥 火焰猫",  pieces: 10, desc: "烈焰燃烧全身" },
+  ];
+  // Gacha reward tables: [weight, type, value]
+  // type: "food"=catFood, "treat"=catTreat, "can"=catCan, "shard_rainbow", "shard_ghost", "shard_flame", "empty"
+  const GACHA_NORMAL = [
+    [40, "food",  [50, 500]],
+    [30, "treat", [1, 3]],
+    [15, "can",   1],
+    [10, "shard", null],  // random shard piece
+    [5,  "empty", null],
+  ];
+  const GACHA_PREMIUM = [
+    [25, "food",  [500, 5000]],
+    [25, "treat", [5, 15]],
+    [20, "can",   3],
+    [15, "shard", null],  // random shard piece
+    [10, "shard_guarantee", null],  // guaranteed shard piece
+    [5,  "jackpot", null],  // 5 cans
+  ];
+
+  const QUEST_POOL = [
+    { id: "click",   name: "点击达人",   targets: [50, 100, 200],   rewardTreat: 1, rewardFood: 50,  desc: (n) => `点击 ${n} 次` },
+    { id: "earn",    name: "勤劳赚钱",   targets: [200, 500, 1000], rewardTreat: 2, rewardFood: 100, desc: (n) => `赚取 ${n} 猫粮` },
+    { id: "event",   name: "事件猎手",   targets: [1, 2, 3],        rewardTreat: 1, rewardFood: 30,  desc: (n) => `触发 ${n} 次事件` },
+    { id: "catnip",  name: "猫薄荷爱好者", targets: [1, 2],          rewardTreat: 1, rewardFood: 20,  desc: (n) => `使用 ${n} 次猫薄荷` },
+    { id: "mood",    name: "快乐猫咪",   targets: [1],              rewardTreat: 2, rewardFood: 80,  desc: () => `心情达到 80 以上` },
+  ];
+
   const CAT_LEVELS = [
     { name: "小奶猫",   minFood: 0,      icon: "🐱" },
     { name: "学徒猫",   minFood: 500,    icon: "😺" },
@@ -235,6 +299,7 @@
     { name: "猫老板",   minFood: 15000,  icon: "😼" },
     { name: "猫皇",     minFood: 50000,  icon: "👑" },
     { name: "猫神",     minFood: 200000, icon: "✨" },
+    { name: "猫仙",     minFood: 1000000, icon: "🌟" },
   ];
 
   const EVENTS = [
@@ -252,20 +317,35 @@
   // ── Config: Achievements ──
   const ACHIEVEMENTS = [
     { id: "firstJob",     name: "初次打工",   icon: "⚒️", desc: "购买第一个自动产出",   check: () => eco.autoLevel >= 1,   reward: { catFood: 20 },  say: "打工第一天!" },
-    { id: "food100",      name: "百粮大户",   icon: "💰", desc: "累计赚取 100 猫粮",    check: () => eco.totalFoodEarned >= 100, reward: { catFood: 50 }, say: "小有积蓄!" },
-    { id: "food1000",     name: "千粮富翁",   icon: "💎", desc: "累计赚取 1000 猫粮",   check: () => eco.totalFoodEarned >= 1000, reward: { catTreat: 1 }, say: "猫粮自由!" },
-    { id: "treat10",      name: "猫条自由",   icon: "🍖", desc: "同时持有 10 猫条",     check: () => eco.catTreat >= 10,   reward: { catTreat: 2 },  say: "猫条管够!" },
-    { id: "can5",         name: "罐头收藏家", icon: "🥫", desc: "同时持有 5 猫罐头",    check: () => eco.catCan >= 5,      reward: { catCan: 1 },    say: "罐头大户!" },
-    { id: "click500",     name: "点击狂人",   icon: "👆", desc: "累计点击 500 次",      check: () => (eco.totalClicks || 0) >= 500, reward: { catFood: 100 }, say: "手速惊人!" },
-    { id: "combo4",       name: "连击大师",   icon: "⚡", desc: "达成 4 连击",          check: () => eco.achievedCombo4,   reward: { catFood: 50 },  say: "连击达人!" },
+    { id: "food500",      name: "百粮大户",   icon: "💰", desc: "累计赚取 500 猫粮",    check: () => eco.totalFoodEarned >= 500, reward: { catFood: 100 }, say: "小有积蓄!" },
+    { id: "food5k",       name: "千粮富翁",   icon: "💎", desc: "累计赚取 5000 猫粮",   check: () => eco.totalFoodEarned >= 5000, reward: { catTreat: 2 }, say: "猫粮自由!" },
+    { id: "treat25",      name: "猫条自由",   icon: "🍖", desc: "同时持有 25 猫条",     check: () => eco.catTreat >= 25,   reward: { catTreat: 3 },  say: "猫条管够!" },
+    { id: "can10",        name: "罐头收藏家", icon: "🥫", desc: "同时持有 10 猫罐头",   check: () => eco.catCan >= 10,     reward: { catCan: 2 },    say: "罐头大户!" },
+    { id: "click2k",      name: "点击狂人",   icon: "👆", desc: "累计点击 2000 次",     check: () => (eco.totalClicks || 0) >= 2000, reward: { catFood: 200 }, say: "手速惊人!" },
+    { id: "combo6",       name: "连击大师",   icon: "⚡", desc: "达成 6 连击",          check: () => eco.achievedCombo6,   reward: { catTreat: 3 },  say: "连击达人!" },
     { id: "allAuto",      name: "全职猫工",   icon: "🏭", desc: "解锁全部自动产出",     check: () => eco.autoLevel >= 5,   reward: { catTreat: 5 },  say: "打工皇帝!" },
     { id: "allUpgrades",  name: "猫生巅峰",   icon: "👑", desc: "全部升级解锁",         check: () => eco.autoLevel >= 5 && eco.clickLevel >= 3 && eco.multLevel >= 3, reward: { catCan: 10 }, say: "猫生巅峰!" },
-    { id: "food10k",      name: "万粮大亨",   icon: "🏦", desc: "累计赚取 10000 猫粮",  check: () => eco.totalFoodEarned >= 10000, reward: { catCan: 3 }, say: "万粮大亨!" },
+    { id: "food50k",      name: "万粮大亨",   icon: "🏦", desc: "累计赚取 50000 猫粮",  check: () => eco.totalFoodEarned >= 50000, reward: { catCan: 3 }, say: "万粮大亨!" },
     { id: "cosmeticAll",  name: "时尚达人",   icon: "👗", desc: "收集全部装饰",         check: () => eco.ownedCosmetics && eco.ownedCosmetics.length >= COSMETICS.length, reward: { catCan: 5 }, say: "时尚达人!" },
-    { id: "eventHunter",  name: "事件猎人",   icon: "🎯", desc: "触发 10 次随机事件",    check: () => (eco.eventCount || 0) >= 10, reward: { catTreat: 5 }, say: "事件猎人!" },
-    { id: "moodMax",      name: "幸福满溢",   icon: "🌈", desc: "心情达到 100",         check: () => mood >= 100, reward: { catFood: 200 }, say: "幸福满溢!" },
-    { id: "checkin7",     name: "坚持签到",   icon: "📅", desc: "连续签到 7 天",        check: () => (eco.checkinStreak || 0) >= 7, reward: { catCan: 2 }, say: "坚持就是胜利!" },
-    { id: "highScore",    name: "超越自我",   icon: "🏅", desc: "最高记录超过 50000",    check: () => (eco.highScore || 0) >= 50000, reward: { catCan: 5 }, say: "超越自我!" },
+    { id: "eventHunter",  name: "事件猎人",   icon: "🎯", desc: "触发 25 次随机事件",    check: () => (eco.eventCount || 0) >= 25, reward: { catTreat: 5 }, say: "事件猎人!" },
+    { id: "moodMax",      name: "幸福满溢",   icon: "🌈", desc: "心情100持续30秒",      check: () => (eco.moodMaxTime || 0) >= 30000, reward: { catFood: 200 }, say: "幸福满溢!" },
+    { id: "checkin14",    name: "坚持签到",   icon: "📅", desc: "连续签到 14 天",       check: () => (eco.checkinStreak || 0) >= 14, reward: { catCan: 2 }, say: "坚持就是胜利!" },
+    { id: "highScore",    name: "超越自我",   icon: "🏅", desc: "最高记录超过 200000",   check: () => (eco.highScore || 0) >= 200000, reward: { catCan: 5 }, say: "超越自我!" },
+    // Long-term achievements
+    { id: "food100k",     name: "十万粮王",   icon: "💰", desc: "累计赚取 100000 猫粮", check: () => eco.totalFoodEarned >= 100000, reward: { catCan: 5 }, say: "粮王驾到!" },
+    { id: "click10k",     name: "点击之神",   icon: "🖱️", desc: "累计点击 10000 次",    check: () => (eco.totalClicks || 0) >= 10000, reward: { catCan: 3 }, say: "神之手速!" },
+    { id: "allCosmetics", name: "收藏家",     icon: "🎭", desc: "拥有全部装饰+全部升级", check: () => eco.ownedCosmetics && eco.ownedCosmetics.length >= COSMETICS.length && eco.autoLevel >= 5 && eco.clickLevel >= 3 && eco.multLevel >= 3, reward: { catCan: 10 }, say: "全收藏!" },
+    { id: "moodMaster",   name: "快乐猫生",   icon: "😻", desc: "心情80以上累计1小时",  check: () => (eco.totalHappyTime || 0) >= 3600000, reward: { catTreat: 5 }, say: "快乐猫生!" },
+    { id: "eventMaster",  name: "命运之子",   icon: "🌟", desc: "触发全部9种事件",      check: () => (eco.seenEvents || []).length >= EVENTS.length, reward: { catCan: 3 }, say: "命运之子!" },
+    { id: "skillMaster",  name: "技能全满",   icon: "🧬", desc: "3个技能全部升满",      check: () => (eco.skillHunt || 0) >= 3 && (eco.skillLuck || 0) >= 3 && (eco.skillSleep || 0) >= 3, reward: { catCan: 5 }, say: "全能猫神!" },
+    { id: "questMaster",  name: "任务达人",   icon: "📋", desc: "累计完成10组每日任务",  check: () => (eco.questsCompleted || 0) >= 10, reward: { catCan: 3 }, say: "任务达人!" },
+    // Estate & Gacha achievements
+    { id: "estateNest",   name: "安居乐业",   icon: "🏠", desc: "购买小窝",             check: () => (eco.ownedEstate || []).includes("nest"), reward: { catTreat: 5 }, say: "有家了!" },
+    { id: "estateCastle", name: "城堡之主",   icon: "🏰", desc: "购买猫咪城堡",         check: () => (eco.ownedEstate || []).includes("castle"), reward: { catCan: 5 }, say: "城堡之主!" },
+    { id: "estatePlanet", name: "星际猫神",   icon: "🌌", desc: "购买猫咪星球",         check: () => (eco.ownedEstate || []).includes("planet"), reward: { catCan: 10 }, say: "星际猫神!" },
+    { id: "gachaFirst",   name: "赌猫",       icon: "🎰", desc: "首次抽奖",             check: () => (eco.gachaShards && Object.values(eco.gachaShards).some(v => v > 0)) || (eco.gachaCosmetics || []).length > 0, reward: { catCan: 2 }, say: "试试手气!" },
+    { id: "gachaRainbow", name: "彩虹猫",     icon: "🌈", desc: "收集彩虹猫外观",       check: () => (eco.gachaCosmetics || []).includes("rainbow"), reward: { catCan: 5 }, say: "七彩光芒!" },
+    { id: "gachaGhost",   name: "幽灵猫",     icon: "👻", desc: "收集幽灵猫外观",       check: () => (eco.gachaCosmetics || []).includes("ghost"), reward: { catCan: 5 }, say: "幽灵现身!" },
   ];
 
   function checkAchievements() {
@@ -312,7 +392,8 @@
     const effectiveMs = Math.min(offlineMs, maxOfflineMs);
     const rate = getEffectiveAutoRate();
     if (rate <= 0) { eco.lastOnline = now; saveEconomy(); return; }
-    const earned = Math.floor(rate * 0.5 * effectiveMs / 1000); // 50% efficiency offline
+    const offlineEfficiency = 0.5 + (eco.skillSleep || 0) * 0.1;
+    const earned = Math.floor(rate * offlineEfficiency * effectiveMs / 1000);
     if (earned <= 0) { eco.lastOnline = now; saveEconomy(); return; }
     eco.catFood += earned;
     eco.totalFoodEarned += earned;
@@ -382,7 +463,7 @@
       lastOnline: Date.now(),
       totalClicks: 0,
       unlockedAch: [],
-      achievedCombo4: false,
+      achievedCombo6: false,
       ownedCosmetics: [],  // purchased cosmetic ids
       equippedCosmetic: null, // currently worn cosmetic id
       mood: 80,            // persisted mood
@@ -390,7 +471,19 @@
       lastCheckin: "",     // last check-in date (YYYY-MM-DD)
       checkinStreak: 0,    // consecutive check-in days
       highScore: 0,        // highest totalFoodEarned ever
-      saveVersion: 4,
+      moodMaxTime: 0,      // ms at mood=100 (resets when <100)
+      totalHappyTime: 0,   // ms at mood>=80 (cumulative)
+      seenEvents: [],      // unique event ids triggered
+      skillHunt: 0,        // precision hunt skill level 0-3
+      skillLuck: 0,        // lucky体质 skill level 0-3
+      skillSleep: 0,       // quality sleep skill level 0-3
+      dailyQuests: null,   // { date, quests: [{id, target, progress, claimed}], allClaimed }
+      questsCompleted: 0,  // total daily quest sets completed
+      ownedEstate: [],     // purchased real estate ids
+      gachaShards: {},     // { rainbow: 0, ghost: 0, flame: 0 }
+      gachaCosmetics: [],  // unlocked gacha cosmetic ids
+      estateGardenTimer: 0, // auto-catnip cooldown (ms)
+      saveVersion: 6,
     };
   }
 
@@ -436,22 +529,35 @@
     return eco.multLevel > 0 ? UPGRADES.multiplier[eco.multLevel - 1].mult : 1;
   }
 
+  function getEstateBonus() {
+    const owned = eco.ownedEstate || [];
+    let bonus = 1;
+    if (owned.includes("castle")) bonus += 0.25;
+    if (owned.includes("planet")) bonus += 0.5;
+    return bonus;
+  }
+
   function getEffectiveAutoRate() {
-    return getAutoRate() * getMultiplier();
+    return getAutoRate() * getMultiplier() * getEstateBonus();
   }
 
   function getEffectiveClickPower() {
-    return getClickPower() * getMultiplier();
+    const base = getClickPower() * getMultiplier() * getEstateBonus();
+    const huntBonus = 1 + (eco.skillHunt || 0) * 0.1;
+    return base * huntBonus;
   }
 
   // Auto-produce accumulator (sub-second precision)
   // autoAccum moved to state section
 
   function getMoodMultiplier() {
-    if (mood >= 80) return 1.5;
-    if (mood >= 50) return 1.0;
-    if (mood >= 20) return 0.5;
-    return 0; // mood < 20: on strike
+    let mult = 1;
+    if (mood >= 80) mult = 1.5;
+    else if (mood >= 50) mult = 1.0;
+    else if (mood >= 20) mult = 0.5;
+    else mult = 0; // mood < 20: on strike
+    if (catnipBuff > 0) mult *= 1.5;
+    return mult;
   }
 
   function tickEconomy(dt) {
@@ -463,6 +569,7 @@
         const earned = Math.floor(autoAccum);
         eco.catFood += earned;
         eco.totalFoodEarned += earned;
+        updateQuestProgress("earn", earned);
         autoAccum -= earned;
       }
     }
@@ -470,7 +577,7 @@
 
   function tickMood(dt) {
     // Mood decays when idle (no clicks for a while)
-    if (idleTime > 10000) {
+    if (idleTime > 5000) {
       moodDecayTimer += dt;
       if (moodDecayTimer >= MOOD_DECAY_INTERVAL) {
         moodDecayTimer -= MOOD_DECAY_INTERVAL;
@@ -478,6 +585,38 @@
       }
     } else {
       moodDecayTimer = 0;
+    }
+    // Catnip buff countdown
+    if (catnipBuff > 0) {
+      catnipBuff -= dt;
+      if (catnipBuff < 0) catnipBuff = 0;
+    }
+    // Track mood max time for achievement
+    if (mood >= 100) {
+      eco.moodMaxTime = (eco.moodMaxTime || 0) + dt;
+    } else {
+      eco.moodMaxTime = 0;
+    }
+    // Track happy time for achievement (mood >= 80)
+    if (mood >= 80) {
+      eco.totalHappyTime = (eco.totalHappyTime || 0) + dt;
+      updateQuestProgress("mood", 1);
+    }
+    // Estate: Nest auto mood recovery (+1 every 10s)
+    if ((eco.ownedEstate || []).includes("nest")) {
+      if (mood < 100) {
+        mood = Math.min(100, mood + dt / 10000);
+      }
+    }
+    // Estate: Garden auto catnip every 5 minutes
+    if ((eco.ownedEstate || []).includes("garden")) {
+      eco.estateGardenTimer = (eco.estateGardenTimer || 0) + dt;
+      if (eco.estateGardenTimer >= 300000) { // 5 minutes
+        eco.estateGardenTimer = 0;
+        catnipBuff = 60000;
+        say("薄荷园自动生效~");
+        spawnParticles("sparkle");
+      }
     }
   }
 
@@ -523,6 +662,9 @@
       else if (eventBonusMult > 1) eventLine = `<div style="color:#8eb95c;font-size:10px">🐱 流浪猫来访，产出x${eventBonusMult}!</div>`;
       else eventLine = `<div style="color:#ffd700;font-size:10px">${activeEvent.icon} ${activeEvent.name}</div>`;
     }
+    if (catnipBuff > 0) {
+      eventLine += `<div style="color:#8eb95c;font-size:10px">🌿 猫薄荷 x1.5 (${Math.ceil(catnipBuff/1000)}秒)</div>`;
+    }
     const moodColor = mood >= 80 ? "#8eb95c" : mood >= 50 ? "#ffd700" : mood >= 20 ? "#ff8c42" : "#ff6b6b";
     const moodLabel = mood >= 80 ? "开心" : mood >= 50 ? "一般" : mood >= 20 ? "低落" : "罢工";
     const catLv = getCatLevel();
@@ -566,14 +708,15 @@
     }
     html += `</div></div>`;
     for (const key of Object.keys(EXCHANGE)) {
-      const ex = EXCHANGE[key];
+      const ex = getExchangeRate(key);
       const count = getExchangeCount(key);
       const canAfford = count > 0;
       const cost = ex.fromAmt * (count || 1);
       const gain = ex.toAmt * (count || 1);
+      const rateLabel = ex.from === "catFood" && ex.fromAmt < 100 ? `猫粮换猫条 (${ex.fromAmt}:1优惠)` : ex.from === "catFood" ? "猫粮换猫条" : "猫条换猫罐头";
       html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="exchange" data-key="${key}">` +
         `<div class="item-info"><div class="item-name">${cost} ${ex.fromIcon} → ${gain} ${ex.toIcon}${count > 1 ? ` x${count}` : ""}</div>` +
-        `<div class="item-desc">${ex.from === "catFood" ? "猫粮换猫条" : "猫条换猫罐头"}</div></div>` +
+        `<div class="item-desc">${rateLabel}</div></div>` +
         `<div class="item-cost">${fmtNum(cost)} ${ex.fromIcon}</div></div>`;
     }
     html += '</div>';
@@ -581,13 +724,19 @@
     // Mood items
     html += '<div class="shop-section">';
     html += '<div class="shop-title">🌿 心情道具</div>';
-    const catnipCost = 5;
+    const catnipCost = 3;
     const canAffordCatnip = eco.catTreat >= catnipCost;
     html += `<div class="shop-item${canAffordCatnip ? "" : " disabled"}" data-action="buyCatnip">` +
       `<div class="item-info"><div class="item-name">🌿 猫薄荷</div>` +
-      `<div class="item-desc">心情瞬间满！滚地5秒</div></div>` +
+      `<div class="item-desc">心情满+产出x1.5持续60秒</div></div>` +
       `<div class="item-cost">${catnipCost} 🍖</div></div>`;
-    html += `<div style="font-size:10px;opacity:.5;text-align:center">当前心情: ${Math.round(mood)}/100</div>`;
+    const toyCost = 1;
+    const canAffordToy = eco.catTreat >= toyCost;
+    html += `<div class="shop-item${canAffordToy ? "" : " disabled"}" data-action="buyToy">` +
+      `<div class="item-info"><div class="item-name">🧸 毛绒玩具</div>` +
+      `<div class="item-desc">心情+30，玩5秒</div></div>` +
+      `<div class="item-cost">${toyCost} 🍖</div></div>`;
+    html += `<div style="font-size:10px;opacity:.5;text-align:center">当前心情: ${Math.round(mood)}/100${catnipBuff > 0 ? " 🌿x1.5" : ""}</div>`;
     html += '</div>';
 
     // Cosmetics
@@ -608,6 +757,24 @@
           `<div class="item-desc">${cos.desc}</div></div>` +
           `<div class="item-cost">${cos.cost} 🥫</div></div>`;
       }
+    }
+    // Gacha/Planet cosmetics
+    const gachaCos = (eco.gachaCosmetics || []);
+    for (const shard of GACHA_SHARDS) {
+      if (gachaCos.includes(shard.id)) {
+        const equipped = eco.equippedCosmetic === shard.id;
+        html += `<div class="shop-item" data-action="equip" data-cosid="${shard.id}">` +
+          `<div class="item-info"><div class="item-name">${shard.name}</div>` +
+          `<div class="item-desc">${shard.desc} (抽奖获得)</div></div>` +
+          `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
+      }
+    }
+    if (gachaCos.includes("planet")) {
+      const equipped = eco.equippedCosmetic === "planet";
+      html += `<div class="shop-item" data-action="equip" data-cosid="planet">` +
+        `<div class="item-info"><div class="item-name">🌌 星际猫</div>` +
+        `<div class="item-desc">星球领主专属 (地产获得)</div></div>` +
+        `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
     }
     html += '</div>';
 
@@ -665,6 +832,68 @@
     }
     html += '</div>';
 
+    // Cat Skills
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">🧬 猫咪技能</div>';
+    for (const skill of SKILLS) {
+      const lvl = eco[skill.id] || 0;
+      if (lvl < skill.levels.length) {
+        const sl = skill.levels[lvl];
+        const canAfford = eco.catCan >= sl.cost;
+        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgradeSkill" data-skillid="${skill.id}">` +
+          `<div class="item-info"><div class="item-name">${skill.name} Lv.${lvl}</div>` +
+          `<div class="item-desc">${sl.desc}</div></div>` +
+          `<div class="item-cost">${sl.cost} 🥫</div></div>`;
+      } else {
+        html += `<div style="opacity:.5;text-align:center;padding:4px;font-size:11px">${skill.name} ✅ Lv.MAX</div>`;
+      }
+    }
+    html += '</div>';
+
+    // Real Estate
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">🏘️ 猫咪地产</div>';
+    const ownedEstate = eco.ownedEstate || [];
+    for (const estate of REAL_ESTATE) {
+      if (ownedEstate.includes(estate.id)) {
+        html += `<div style="opacity:.5;text-align:center;padding:4px;font-size:11px">${estate.name} ✅ ${estate.desc}</div>`;
+      } else {
+        const canAfford = eco.catFood >= estate.cost;
+        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="buyEstate" data-estateid="${estate.id}">` +
+          `<div class="item-info"><div class="item-name">${estate.name}</div>` +
+          `<div class="item-desc">${estate.desc}</div></div>` +
+          `<div class="item-cost">${fmtNum(estate.cost)} 🐾</div></div>`;
+      }
+    }
+    html += '</div>';
+
+    // Gacha
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">🎰 猫咪抽奖</div>';
+    const canNormal = eco.catCan >= GACHA_NORMAL_COST;
+    const canPremium = eco.catCan >= GACHA_PREMIUM_COST;
+    html += `<div class="shop-item${canNormal ? "" : " disabled"}" data-action="gacha" data-premium="0">` +
+      `<div class="item-info"><div class="item-name">🎰 普通抽奖</div>` +
+      `<div class="item-desc">猫粮/猫条/碎片</div></div>` +
+      `<div class="item-cost">${GACHA_NORMAL_COST} 🥫</div></div>`;
+    html += `<div class="shop-item${canPremium ? "" : " disabled"}" data-action="gacha" data-premium="1">` +
+      `<div class="item-info"><div class="item-name">🎰✨ 豪华抽奖</div>` +
+      `<div class="item-desc">更高稀有度+保底碎片</div></div>` +
+      `<div class="item-cost">${GACHA_PREMIUM_COST} 🥫</div></div>`;
+    // Show shard progress
+    if (eco.gachaShards && Object.keys(eco.gachaShards).length > 0) {
+      html += '<div style="font-size:10px;opacity:.6;margin-top:4px">';
+      for (const shard of GACHA_SHARDS) {
+        const count = eco.gachaShards[shard.id] || 0;
+        if (count > 0) {
+          const done = (eco.gachaCosmetics || []).includes(shard.id);
+          html += `${shard.name}: ${done ? "✅" : `${count}/${shard.pieces}`} `;
+        }
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
     // Stats
     html += '<div style="font-size:10px;opacity:.4;text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border,rgba(255,255,255,.1))">' +
       `累计赚取 ${fmtNum(eco.totalFoodEarned)} 猫粮 | 点击 ${eco.totalClicks || 0} 次</div>`;
@@ -696,6 +925,39 @@
     } else {
       html += `<div style="font-size:11px">连续${streak}天 · 本次可领 +${checkinBonus}🐾</div>`;
       html += `<button data-action="checkin" style="margin-top:4px;width:100%;padding:6px;border-radius:8px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:var(--color-text-primary);color:var(--color-surface);font-size:12px;cursor:pointer;font-weight:600">📅 签到领取 +${checkinBonus}🐾</button>`;
+    }
+    html += '</div>';
+
+    // Daily Quests
+    ensureDailyQuests();
+    const dq = eco.dailyQuests;
+    html += '<div class="shop-section">';
+    html += '<div class="shop-title">📋 每日任务</div>';
+    if (dq && dq.quests) {
+      for (let i = 0; i < dq.quests.length; i++) {
+        const q = dq.quests[i];
+        const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+        const done = q.progress >= q.target;
+        if (q.claimed) {
+          html += `<div style="padding:4px 0;font-size:11px;opacity:.5">✅ ${q.desc}</div>`;
+        } else if (done) {
+          html += `<div style="padding:4px 0;font-size:11px;display:flex;align-items:center;justify-content:space-between">` +
+            `<span>${q.desc} ✅</span>` +
+            `<button data-action="claimQuest" data-qindex="${i}" style="padding:2px 8px;border-radius:4px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:var(--color-text-primary);color:var(--color-surface);font-size:10px;cursor:pointer;font-weight:600">领取</button></div>`;
+        } else {
+          html += `<div style="padding:4px 0;font-size:11px">` +
+            `<div style="display:flex;justify-content:space-between"><span>${q.desc}</span><span style="opacity:.6">${q.progress}/${q.target}</span></div>` +
+            `<div style="margin-top:2px;height:4px;border-radius:2px;background:var(--color-border,rgba(255,255,255,.1));overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--color-accent,#8eb95c);border-radius:2px;transition:width .3s"></div></div></div>`;
+        }
+      }
+      if (dq.allClaimed) {
+        html += `<div style="font-size:10px;opacity:.6;text-align:center;margin-top:4px">🎉 全部完成! +1🥫</div>`;
+      } else if (dq.quests.every(q2 => q2.claimed) && !dq.allClaimed) {
+        // This shouldn't happen but just in case
+      } else {
+        const claimed = dq.quests.filter(q2 => q2.claimed).length;
+        html += `<div style="font-size:10px;opacity:.5;text-align:center;margin-top:4px">完成 ${claimed}/3 · 全部完成额外 +1🥫</div>`;
+      }
     }
     html += '</div>';
 
@@ -735,8 +997,12 @@
         if (action === "exchange") doExchange(item.dataset.key);
         else if (action === "upgrade") doUpgrade(item.dataset.type);
         else if (action === "buyCatnip") doBuyCatnip();
+        else if (action === "buyToy") doBuyToy();
         else if (action === "buyCosmetic") doBuyCosmetic(item.dataset.cosid);
         else if (action === "equip") doEquipCosmetic(item.dataset.cosid);
+        else if (action === "upgradeSkill") doUpgradeSkill(item.dataset.skillid);
+        else if (action === "buyEstate") doBuyEstate(item.dataset.estateid);
+        else if (action === "gacha") doGacha(item.dataset.premium === "1");
       };
     });
     // Bind mode toggle buttons
@@ -759,6 +1025,9 @@
     });
     c.querySelectorAll("[data-action='checkin']").forEach(btn => {
       btn.onclick = (e) => { e.stopPropagation(); doCheckin(); renderShop(); };
+    });
+    c.querySelectorAll("[data-action='claimQuest']").forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); claimQuest(parseInt(btn.dataset.qindex)); };
     });
     c.querySelectorAll("[data-action='share']").forEach(btn => {
       btn.onclick = (e) => { e.stopPropagation(); doShare(); };
@@ -837,13 +1106,81 @@
     }
   }
 
+  // ── Quests: Daily ──
+  function generateDailyQuests() {
+    const shuffled = [...QUEST_POOL].sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, 3);
+    const quests = selected.map(q => {
+      const target = q.targets[Math.floor(Math.random() * q.targets.length)];
+      return { id: q.id, name: q.name, target, progress: 0, claimed: false, desc: q.desc(target), rewardTreat: q.rewardTreat, rewardFood: q.rewardFood };
+    });
+    return { date: getTodayStr(), quests, allClaimed: false };
+  }
+
+  function ensureDailyQuests() {
+    const today = getTodayStr();
+    if (!eco.dailyQuests || eco.dailyQuests.date !== today) {
+      eco.dailyQuests = generateDailyQuests();
+      saveEconomy();
+    }
+  }
+
+  function updateQuestProgress(questId, amount) {
+    if (!eco.dailyQuests) return;
+    for (const q of eco.dailyQuests.quests) {
+      if (q.id === questId && !q.claimed) {
+        q.progress = Math.min(q.target, (q.progress || 0) + amount);
+      }
+    }
+  }
+
+  function claimQuest(index) {
+    if (!eco.dailyQuests) return;
+    const q = eco.dailyQuests.quests[index];
+    if (!q || q.claimed || q.progress < q.target) return;
+    q.claimed = true;
+    eco.catTreat += q.rewardTreat;
+    eco.catFood += q.rewardFood;
+    eco.totalFoodEarned += q.rewardFood;
+    say(`任务完成! +${q.rewardTreat}🍖 +${q.rewardFood}🐾`);
+    spawnParticles("sparkle");
+    // Check if all claimed
+    if (eco.dailyQuests.quests.every(q2 => q2.claimed) && !eco.dailyQuests.allClaimed) {
+      eco.dailyQuests.allClaimed = true;
+      eco.catCan += 1;
+      eco.questsCompleted = (eco.questsCompleted || 0) + 1;
+      say("全部完成! +1🥫 额外奖励!");
+      spawnParticles("star");
+    }
+    saveEconomy();
+    renderShop();
+  }
+
+  // Initialize daily quests on load
+  ensureDailyQuests();
+
   function doBuyCatnip() {
-    const cost = 5;
+    const cost = 3;
     if (eco.catTreat < cost) return;
     eco.catTreat -= cost;
     mood = 100;
+    catnipBuff = 60000; // 60s production buff
     state = "roll";
     say("喵喵喵~好嗨!");
+    spawnParticles("heart");
+    updateQuestProgress("catnip", 1);
+    setTimeout(() => { state = "sit"; }, 5000);
+    saveEconomy();
+    renderShop();
+  }
+
+  function doBuyToy() {
+    const cost = 1;
+    if (eco.catTreat < cost) return;
+    eco.catTreat -= cost;
+    mood = Math.min(100, mood + 30);
+    state = "roll";
+    say("好好玩~!");
     spawnParticles("heart");
     setTimeout(() => { state = "sit"; }, 5000);
     saveEconomy();
@@ -876,8 +1213,123 @@
     renderShop();
   }
 
-  function getExchangeCount(key) {
+  function doUpgradeSkill(skillId) {
+    const skill = SKILLS.find(s => s.id === skillId);
+    if (!skill) return;
+    const lvl = eco[skillId] || 0;
+    if (lvl >= skill.levels.length) return;
+    const sl = skill.levels[lvl];
+    if (eco.catCan < sl.cost) return;
+    eco.catCan -= sl.cost;
+    eco[skillId] = lvl + 1;
+    say(sl.say);
+    spawnParticles("star");
+    saveEconomy();
+    renderShop();
+  }
+
+  // ── Real Estate: Purchase ──
+  function doBuyEstate(estateId) {
+    const estate = REAL_ESTATE.find(e => e.id === estateId);
+    if (!estate) return;
+    if ((eco.ownedEstate || []).includes(estateId)) return;
+    if (eco.catFood < estate.cost) return;
+    eco.catFood -= estate.cost;
+    if (!eco.ownedEstate) eco.ownedEstate = [];
+    eco.ownedEstate.push(estateId);
+    say(estate.say);
+    spawnParticles("star");
+    // Planet unlocks special cosmetic
+    if (estateId === "planet") {
+      if (!eco.gachaCosmetics) eco.gachaCosmetics = [];
+      if (!eco.gachaCosmetics.includes("planet")) eco.gachaCosmetics.push("planet");
+    }
+    saveEconomy();
+    renderShop();
+  }
+
+  // ── Gacha: Roll ──
+  function rollGacha(table) {
+    const totalWeight = table.reduce((s, r) => s + r[0], 0);
+    let r = Math.random() * totalWeight;
+    for (const entry of table) {
+      r -= entry[0];
+      if (r <= 0) return entry;
+    }
+    return table[table.length - 1];
+  }
+
+  function doGacha(premium) {
+    const cost = premium ? GACHA_PREMIUM_COST : GACHA_NORMAL_COST;
+    if (eco.catCan < cost) return;
+    eco.catCan -= cost;
+    const table = premium ? GACHA_PREMIUM : GACHA_NORMAL;
+    const result = rollGacha(table);
+    const [, type, value] = result;
+    let rewardText = "";
+
+    if (type === "food") {
+      const [min, max] = value;
+      const earned = min + Math.floor(Math.random() * (max - min + 1));
+      eco.catFood += earned;
+      eco.totalFoodEarned += earned;
+      rewardText = `+${fmtNum(earned)} 🐾`;
+    } else if (type === "treat") {
+      const [min, max] = value;
+      const earned = min + Math.floor(Math.random() * (max - min + 1));
+      eco.catTreat += earned;
+      rewardText = `+${earned} 🍖`;
+    } else if (type === "can") {
+      eco.catCan += value;
+      rewardText = `+${value} 🥫`;
+    } else if (type === "shard" || type === "shard_guarantee") {
+      const shard = GACHA_SHARDS[Math.floor(Math.random() * GACHA_SHARDS.length)];
+      if (!eco.gachaShards) eco.gachaShards = {};
+      eco.gachaShards[shard.id] = (eco.gachaShards[shard.id] || 0) + 1;
+      rewardText = `${shard.name} 碎片 +1 (${eco.gachaShards[shard.id]}/${shard.pieces})`;
+      // Check if completed
+      if (eco.gachaShards[shard.id] >= shard.pieces) {
+        if (!eco.gachaCosmetics) eco.gachaCosmetics = [];
+        if (!eco.gachaCosmetics.includes(shard.id)) {
+          eco.gachaCosmetics.push(shard.id);
+          rewardText += ` → 解锁${shard.name}!`;
+        }
+      }
+    } else if (type === "jackpot") {
+      eco.catCan += 5;
+      rewardText = "🎉 大奖! +5 🥫";
+    } else {
+      rewardText = "空...下次好运!";
+    }
+
+    say(rewardText);
+    spawnParticles(type === "jackpot" ? "star" : type === "shard_guarantee" ? "sparkle" : "heart");
+    saveEconomy();
+    renderShop();
+    // Show gacha result notification
+    showGachaResult(rewardText, premium);
+  }
+
+  function showGachaResult(text, premium) {
+    const notif = document.createElement("div");
+    notif.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10000;padding:16px 28px;border-radius:16px;text-align:center;font-size:14px;font-weight:700;pointer-events:none;animation:achieveIn .5s ease-out;${premium ? "background:linear-gradient(135deg,#9b59b6,#8e44ad);color:#fff;box-shadow:0 4px 24px rgba(155,89,182,.4);" : "background:linear-gradient(135deg,#3498db,#2980b9);color:#fff;box-shadow:0 4px 24px rgba(52,152,219,.4);"}`;
+    notif.innerHTML = `<div style="font-size:24px;margin-bottom:4px">${premium ? "🎰✨" : "🎰"}</div><div>${premium ? "豪华抽奖" : "普通抽奖"}</div><div style="font-size:12px;margin-top:6px">${text}</div>`;
+    document.body.appendChild(notif);
+    setTimeout(() => { notif.style.opacity = "0"; notif.style.transition = "opacity .5s"; }, 2000);
+    setTimeout(() => notif.remove(), 2500);
+  }
+
+  function getExchangeRate(key) {
     const ex = EXCHANGE[key];
+    // Cat Food Shop estate: 80 food -> 1 treat instead of 100
+    if (key === "foodToTreat" && (eco.ownedEstate || []).includes("shop")) {
+      return { ...ex, fromAmt: 80 };
+    }
+    return ex;
+  }
+
+  function getExchangeCount(key) {
+    const ex = getExchangeRate(key);
     const available = Math.floor(eco[ex.from] / ex.fromAmt);
     if (exchangeMode === "x1") return Math.min(1, available);
     if (exchangeMode === "x10") return Math.min(10, available);
@@ -885,7 +1337,7 @@
   }
 
   function doExchange(key) {
-    const ex = EXCHANGE[key];
+    const ex = getExchangeRate(key);
     const count = getExchangeCount(key);
     if (count <= 0) return;
     eco[ex.from] -= ex.fromAmt * count;
@@ -1131,6 +1583,51 @@
       if (frame % 20 < 10) {
         box(28 + Math.sin(frame * 0.3) * 3, -6 + Math.cos(frame * 0.4) * 2, 2, 2, "#fff");
       }
+    } else if (cos === "rainbow") {
+      // Rainbow aura around cat
+      const hue = (frame * 3) % 360;
+      const r = `hsl(${hue},100%,60%)`;
+      const r2 = `hsl(${(hue + 120) % 360},100%,60%)`;
+      const r3 = `hsl(${(hue + 240) % 360},100%,60%)`;
+      box(14, 8, 3, 3, r);
+      box(47, 8, 3, 3, r2);
+      box(14, 55, 3, 3, r3);
+      box(47, 55, 3, 3, r);
+      if (frame % 10 < 5) {
+        box(10 + Math.sin(frame * 0.2) * 4, 30, 2, 2, r2);
+        box(50 + Math.cos(frame * 0.2) * 4, 30, 2, 2, r3);
+      }
+    } else if (cos === "ghost") {
+      // Ghost: semi-transparent overlay (simulated with light colors)
+      box(16, 10, 33, 28, "rgba(200,220,255,0.3)");
+      box(19, 31, 26, 24, "rgba(200,220,255,0.3)");
+      // Ghost wisps
+      if (frame % 15 < 8) {
+        box(12 + Math.sin(frame * 0.3) * 3, 20, 3, 3, "rgba(200,220,255,0.5)");
+        box(49 + Math.cos(frame * 0.3) * 3, 40, 3, 3, "rgba(200,220,255,0.5)");
+      }
+    } else if (cos === "flame") {
+      // Flame particles around cat
+      const flicker = Math.sin(frame * 0.5) * 2;
+      box(18, 6 + flicker, 4, 4, "#ff4500");
+      box(42, 4 - flicker, 4, 4, "#ff6600");
+      box(24, 2 + flicker * 0.5, 3, 3, "#ffaa00");
+      box(38, 0 - flicker * 0.5, 3, 3, "#ff8c00");
+      if (frame % 8 < 4) {
+        box(14, 10 + Math.random() * 4, 2, 2, "#ff4500");
+        box(48, 8 + Math.random() * 4, 2, 2, "#ff6600");
+      }
+    } else if (cos === "planet") {
+      // Planet: cosmic ring + star particles
+      box(12, 28, 40, 2, "rgba(100,149,237,0.6)");
+      box(12, 30, 40, 1, "rgba(100,149,237,0.3)");
+      // Orbiting stars
+      const sx = 32 + Math.cos(frame * 0.05) * 25;
+      const sy = 29 + Math.sin(frame * 0.05) * 5;
+      box(sx, sy, 2, 2, "#fff");
+      const sx2 = 32 + Math.cos(frame * 0.05 + Math.PI) * 25;
+      const sy2 = 29 + Math.sin(frame * 0.05 + Math.PI) * 5;
+      box(sx2, sy2, 2, 2, "#ffd700");
     }
 
     ctx.restore();
@@ -1201,6 +1698,9 @@
   function triggerEvent(evt) {
     activeEvent = evt;
     eco.eventCount = (eco.eventCount || 0) + 1;
+    if (!eco.seenEvents) eco.seenEvents = [];
+    if (!eco.seenEvents.includes(evt.id)) eco.seenEvents.push(evt.id);
+    updateQuestProgress("event", 1);
     say(evt.say);
     spawnParticles("sparkle");
 
@@ -1303,7 +1803,8 @@
 
   function endEvent() {
     activeEvent = null;
-    eventCooldown = 30000 + Math.random() * 90000; // 30-120s until next
+    const luckReduction = 1 - (eco.skillLuck || 0) * 0.1;
+    eventCooldown = (30000 + Math.random() * 90000) * luckReduction; // 30-120s until next, reduced by luck
     eventTimer = 0;
   }
 
@@ -1427,7 +1928,13 @@
     eco.catFood += actualEarned;
     eco.totalFoodEarned += actualEarned;
     eco.totalClicks = (eco.totalClicks || 0) + 1;
-    mood = Math.min(100, mood + MOOD_CLICK_BOOST);
+    updateQuestProgress("click", 1);
+    if (actualEarned > 0) updateQuestProgress("earn", actualEarned);
+    const now2 = Date.now();
+    if (now2 - lastMoodClickTime >= MOOD_CLICK_COOLDOWN) {
+      mood = Math.min(100, mood + MOOD_CLICK_BOOST);
+      lastMoodClickTime = now2;
+    }
     showFloatText(actualEarned > 0 ? `+${actualEarned} 🐾` : "罢工中!");
     saveEconomy();
 
@@ -1435,10 +1942,15 @@
     if (now - lastClickTime < 400) {
       comboCount++;
       comboTimer = 1500;
-      if (comboCount >= 4) {
+      if (comboCount >= 6) {
         state = "puff";
         say("喵喵喵!!!");
-        eco.achievedCombo4 = true;
+        eco.achievedCombo6 = true;
+        spawnParticles("star");
+        setTimeout(() => { state = "sit"; idleTime = 0; comboCount = 0; }, 2000);
+      } else if (comboCount >= 4) {
+        state = "puff";
+        say("喵喵!!");
         spawnParticles("star");
         setTimeout(() => { state = "sit"; idleTime = 0; comboCount = 0; }, 2000);
       } else if (comboCount === 3) {
