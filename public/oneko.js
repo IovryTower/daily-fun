@@ -39,14 +39,14 @@
 
   // ── DOM: Currency Bar ──
   const currencyBar = document.createElement("div");
-  currencyBar.style.cssText = "position:fixed;top:12px;right:12px;z-index:999;background:var(--color-surface);color:var(--color-text-primary);padding:10px 16px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.12);font-size:13px;line-height:1.8;pointer-events:none;backdrop-filter:blur(8px);border:1px solid var(--color-border,rgba(255,255,255,.1));max-width:calc(100vw - 24px);";
+  currencyBar.style.cssText = "position:fixed;top:56px;right:12px;z-index:998;background:var(--color-surface);color:var(--color-text-primary);padding:10px 16px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.12);font-size:13px;line-height:1.8;pointer-events:none;backdrop-filter:blur(8px);border:1px solid var(--color-border,rgba(255,255,255,.1));max-width:calc(100vw - 24px);";
   currencyBar.innerHTML = '<div id="cat-currency-display"></div>';
   document.body.appendChild(currencyBar);
 
   // ── UI: Shop Panel ──
   const shopBtn = document.createElement("div");
   shopBtn.className = "neko-shop-btn";
-  shopBtn.style.cssText = "position:fixed;bottom:12px;left:12px;z-index:999;width:44px;height:44px;background:var(--color-surface);color:var(--color-text-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.15);border:1px solid var(--color-border,rgba(255,255,255,.1));transition:transform .2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;";
+  shopBtn.style.cssText = "position:fixed;top:12px;right:12px;z-index:999;width:36px;height:36px;background:var(--color-surface);color:var(--color-text-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.15);border:1px solid var(--color-border,rgba(255,255,255,.1));transition:transform .2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;";
   shopBtn.textContent = "🛒";
   shopBtn.onmouseenter = () => shopBtn.style.transform = "scale(1.1)";
   shopBtn.onmouseleave = () => shopBtn.style.transform = "scale(1)";
@@ -54,7 +54,7 @@
 
   const shopPanel = document.createElement("div");
   shopPanel.className = "neko-shop-panel";
-  shopPanel.style.cssText = "position:fixed;bottom:64px;left:12px;z-index:999;width:280px;max-width:calc(100vw - 24px);max-height:70vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--color-surface);color:var(--color-text-primary);border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.2);padding:16px;display:none;font-size:12px;border:1px solid var(--color-border,rgba(255,255,255,.1));backdrop-filter:blur(8px);";
+  shopPanel.style.cssText = "position:fixed;top:56px;right:12px;z-index:999;width:280px;max-width:calc(100vw - 24px);max-height:70vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--color-surface);color:var(--color-text-primary);border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.2);padding:16px;display:none;font-size:12px;border:1px solid var(--color-border,rgba(255,255,255,.1));backdrop-filter:blur(8px);";
   shopPanel.innerHTML = '<div id="cat-shop-content"></div>';
   document.body.appendChild(shopPanel);
 
@@ -93,8 +93,8 @@
     "#cat-shop-content .shop-item .item-owned{font-size:10px;opacity:.6;margin-left:4px}",
     "@media(max-width:480px){#cat-currency-display{font-size:11px!important;line-height:1.6!important}#cat-currency-display span{font-size:9px!important}}",
     "@media(max-width:480px){#cat-shop-content .shop-item{padding:8px 6px}#cat-shop-content .shop-title{font-size:12px}}",
-    "@media(max-width:480px){.neko-shop-btn{width:48px!important;height:48px!important;font-size:22px!important;bottom:16px!important}}",
-    "@media(max-width:480px){.neko-shop-panel{width:calc(100vw - 24px)!important;left:12px!important;bottom:72px!important;max-height:60vh!important}}",
+    "@media(max-width:480px){.neko-shop-btn{width:40px!important;height:40px!important;font-size:18px!important;top:8px!important;right:8px!important}}",
+    "@media(max-width:480px){.neko-shop-panel{width:calc(100vw - 16px)!important;right:8px!important;top:52px!important;max-height:60vh!important}}",
   ].join("");
   document.head.appendChild(style);
 
@@ -179,6 +179,7 @@
   // Economy state
   let exchangeMode = "x1"; // x1, x10, max
   let autoAccum = 0;
+  let sayTimeout = null;
 
   // ── Config: Economy ──
   const SAVE_KEY = "pixelCatEconomy";
@@ -1136,7 +1137,6 @@
   }
 
   // ── UI: Speech Bubble ──
-  let sayTimeout = null;
   function say(t) {
     sayEl.textContent = t;
     sayEl.style.display = "block";
