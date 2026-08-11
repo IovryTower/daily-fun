@@ -5,16 +5,19 @@ interface Props {
 
 const { category } = Astro.props;
 
-const categoryLabels: Record<string, string> = {
-  meme: '梗图',
-  joke: '笑话',
-  quote: '趣句',
-  gif: '动图',
-  image: '趣图',
-  other: '其他',
+const categoryMeta: Record<string, { label: string; icon: string }> = {
+  meme:  { label: '梗图', icon: '😂' },
+  joke:  { label: '笑话', icon: '🤣' },
+  quote: { label: '趣句', icon: '✨' },
+  gif:   { label: '动图', icon: '🎬' },
+  image: { label: '趣图', icon: '🖼️' },
+  other: { label: '其他', icon: '🎲' },
 };
+
+const meta = categoryMeta[category] || { label: category, icon: '📁' };
 ---
 
-<span class="inline-block rounded-md bg-badge-bg px-2 py-0.5 text-xs font-medium text-accent">
-  {categoryLabels[category] || category}
+<span class="inline-flex items-center gap-1 rounded-md bg-badge-bg px-2 py-0.5 text-xs font-medium text-accent">
+  <span>{meta.icon}</span>
+  <span>{meta.label}</span>
 </span>

@@ -3,13 +3,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import FunFeed from '../../components/FunFeed.astro';
 import { getCollection } from 'astro:content';
 
-const categoryLabels: Record<string, string> = {
-  meme: '梗图',
-  joke: '笑话',
-  quote: '趣句',
-  gif: '动图',
-  image: '趣图',
-  other: '其他',
+const categoryMeta: Record<string, { label: string; icon: string; desc: string }> = {
+  meme:  { label: '梗图', icon: '😂', desc: '沙雕表情包，快乐源泉' },
+  joke:  { label: '笑话', icon: '🤣', desc: '冷笑话热笑话，总有一款' },
+  quote: { label: '趣句', icon: '✨', desc: '神级语录，细品有味' },
+  gif:   { label: '动图', icon: '🎬', desc: '魔性动图，停不下来' },
+  image: { label: '趣图', icon: '🖼️', desc: '奇图异画，大开眼界' },
+  other: { label: '其他', icon: '🎲', desc: '杂七杂八，同样有趣' },
 };
 
 export async function getStaticPaths() {
@@ -26,19 +26,25 @@ export async function getStaticPaths() {
 
 const { category } = Astro.params;
 const { items } = Astro.props;
-const label = categoryLabels[category!] || category;
+const meta = categoryMeta[category!] || { label: category, icon: '📁', desc: '' };
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const PAGE_SIZE = 6;
 const pageData = items.slice(0, PAGE_SIZE);
 const lastPage = Math.ceil(items.length / PAGE_SIZE);
 ---
 
-<BaseLayout title={`${label} - Daily Fun`} description={`浏览${label}分类的搞笑内容`}>
+<BaseLayout title={`${meta.label} - Daily Fun`} description={`浏览${meta.label}分类的搞笑内容`}>
   <section class="mb-8">
     <div class="flex items-center gap-3">
       <a href={`${base}/category`} class="text-sm text-text-secondary no-underline transition-colors hover:text-accent">← 全部分类</a>
-      <h1 class="text-2xl font-bold text-text-primary">{label}</h1>
-      <span class="rounded-md bg-badge-bg px-2 py-0.5 text-xs text-accent">{items.length} 条</span>
+    </div>
+    <div class="mt-4 flex items-center gap-4">
+      <span class="text-4xl">{meta.icon}</span>
+      <div>
+        <h1 class="text-2xl font-bold text-text-primary">{meta.label}</h1>
+        <p class="text-sm text-text-secondary">{meta.desc}</p>
+      </div>
+      <span class="ml-auto rounded-md bg-badge-bg px-2 py-0.5 text-xs text-accent">{items.length} 条</span>
     </div>
   </section>
   <FunFeed items={pageData} />

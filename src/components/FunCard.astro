@@ -44,7 +44,8 @@ const isImageCard = !!image;
   )}
 
   {isTextOnly && description && (
-    <blockquote class="mb-3 border-l-3 border-accent pl-4 text-lg leading-relaxed text-text-primary">
+    <blockquote class={`mb-3 border-l-3 pl-4 leading-relaxed text-text-primary ${category === 'quote' ? 'border-accent text-xl italic' : 'border-accent text-lg'}`}>
+      {category === 'quote' && <span class="mr-1 text-2xl text-accent opacity-40">❝</span>}
       {description}
     </blockquote>
   )}

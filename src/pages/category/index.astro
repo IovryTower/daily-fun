@@ -4,13 +4,13 @@ import { getCollection } from 'astro:content';
 
 const allFun = await getCollection('fun');
 
-const categoryLabels: Record<string, string> = {
-  meme: '梗图',
-  joke: '笑话',
-  quote: '趣句',
-  gif: '动图',
-  image: '趣图',
-  other: '其他',
+const categoryMeta: Record<string, { label: string; icon: string; desc: string }> = {
+  meme:  { label: '梗图', icon: '😂', desc: '沙雕表情包，快乐源泉' },
+  joke:  { label: '笑话', icon: '🤣', desc: '冷笑话热笑话，总有一款' },
+  quote: { label: '趣句', icon: '✨', desc: '神级语录，细品有味' },
+  gif:   { label: '动图', icon: '🎬', desc: '魔性动图，停不下来' },
+  image: { label: '趣图', icon: '🖼️', desc: '奇图异画，大开眼界' },
+  other: { label: '其他', icon: '🎲', desc: '杂七杂八，同样有趣' },
 };
 
 const categoryCounts: Record<string, number> = {};
@@ -26,14 +26,19 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 <BaseLayout title="分类" description="按分类浏览搞笑内容">
   <h1 class="mb-8 text-2xl font-bold text-text-primary">分类</h1>
   <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
-    {categories.map(([cat, count]) => (
+    {categories.map(([cat, count]) => {
+      const meta = categoryMeta[cat] || { label: cat, icon: '📁', desc: '' };
+      return (
       <a
         href={`${base}/category/${cat}`}
         class="group rounded-xl border border-border bg-surface p-5 text-center no-underline transition-all hover:border-accent hover:shadow-[0_4px_12px_var(--color-card-shadow)]"
       >
-        <div class="text-2xl font-bold text-accent group-hover:text-accent-hover">{count}</div>
-        <div class="mt-1 text-sm text-text-secondary">{categoryLabels[cat] || cat}</div>
+        <div class="mb-2 text-3xl">{meta.icon}</div>
+        <div class="text-lg font-bold text-text-primary group-hover:text-accent">{meta.label}</div>
+        <div class="mt-1 text-xs text-text-secondary">{meta.desc}</div>
+        <div class="mt-3 text-2xl font-bold text-accent group-hover:text-accent-hover">{count}<span class="text-sm font-normal text-text-secondary"> 条</span></div>
       </a>
-    ))}
+      );
+    })}
   </div>
 </BaseLayout>
