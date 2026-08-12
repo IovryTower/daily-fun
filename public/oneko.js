@@ -32,6 +32,11 @@
   particleWrap.style.cssText = "position:absolute;top:0;left:0;width:64px;height:64px;pointer-events:none;overflow:visible;";
   el.appendChild(particleWrap);
 
+  // Estate icons container
+  const estateWrap = document.createElement("div");
+  estateWrap.style.cssText = "position:absolute;top:-16px;left:-16px;width:96px;height:96px;pointer-events:none;overflow:visible;";
+  el.appendChild(estateWrap);
+
   // Click +1 floating text container
   const floatWrap = document.createElement("div");
   floatWrap.style.cssText = "position:absolute;top:0;left:0;width:64px;height:64px;pointer-events:none;overflow:visible;";
@@ -39,7 +44,7 @@
 
   // ── DOM: Currency Bar ──
   const currencyBar = document.createElement("div");
-  currencyBar.style.cssText = "position:fixed;top:56px;right:12px;z-index:998;background:var(--color-surface);color:var(--color-text-primary);padding:10px 16px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.12);font-size:13px;line-height:1.8;pointer-events:none;backdrop-filter:blur(8px);border:1px solid var(--color-border,rgba(255,255,255,.1));max-width:calc(100vw - 24px);";
+  currencyBar.style.cssText = "position:fixed;top:56px;right:12px;z-index:998;background:var(--color-surface);color:var(--color-text-primary);padding:10px 16px;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.12);font-size:13px;line-height:1.8;cursor:pointer;backdrop-filter:blur(8px);border:1px solid var(--color-border,rgba(255,255,255,.1));max-width:calc(100vw - 24px);transition:max-height .3s ease,padding .3s ease;overflow:hidden;";
   currencyBar.innerHTML = '<div id="cat-currency-display"></div>';
   document.body.appendChild(currencyBar);
 
@@ -63,15 +68,30 @@
     e.stopPropagation();
     shopOpen = !shopOpen;
     shopPanel.style.display = shopOpen ? "block" : "none";
-    if (shopOpen) renderShop();
+    if (shopOpen) {
+      renderShop();
+      currencyExpanded = false;
+      updateCurrencyDisplay();
+    } else {
+      currencyExpanded = true;
+      updateCurrencyDisplay();
+    }
   };
   // Close shop when clicking outside
   document.addEventListener("click", (e) => {
     if (shopOpen && !shopPanel.contains(e.target) && e.target !== shopBtn) {
       shopOpen = false;
       shopPanel.style.display = "none";
+      currencyExpanded = true;
+      updateCurrencyDisplay();
     }
   });
+  // Currency bar click to toggle expand/collapse
+  currencyBar.onclick = (e) => {
+    e.stopPropagation();
+    currencyExpanded = !currencyExpanded;
+    updateCurrencyDisplay();
+  };
 
   // ── UI: Styles & Animations ──
   const style = document.createElement("style");
@@ -80,17 +100,26 @@
     "@keyframes particleBurst{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--px),var(--py)) scale(0);opacity:0}}",
     "@keyframes floatUp{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-30px);opacity:0}}",
     "@keyframes achieveIn{0%{transform:translate(-50%,-50%) scale(.5);opacity:0}60%{transform:translate(-50%,-50%) scale(1.1)}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}",
-    "@keyframes shopItemHover{0%{background-position:0% 50%}100%{background-position:100% 50%}}",
+    "@keyframes buyFlash{0%{transform:scale(1);background:transparent}30%{transform:scale(1.05);background:rgba(142,185,92,.2)}60%{transform:scale(.97)}100%{transform:scale(1);background:transparent}}",
+    "@keyframes buyFail{0%,100%{transform:translateX(0)}20%{transform:translateX(-3px)}40%{transform:translateX(3px)}60%{transform:translateX(-2px)}80%{transform:translateX(2px)}}",
+    "@keyframes estateFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}",
     "#cat-shop-content .shop-section{margin-bottom:12px}",
     "#cat-shop-content .shop-title{font-size:13px;font-weight:700;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--color-border,rgba(255,255,255,.1))}",
-    "#cat-shop-content .shop-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin:4px 0;border-radius:8px;cursor:pointer;transition:background .2s;gap:6px}",
+    "#cat-shop-content .shop-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;margin:4px 0;border-radius:8px;cursor:pointer;gap:6px}",
     "#cat-shop-content .shop-item:hover{background:var(--color-border,rgba(255,255,255,.08))}",
     "#cat-shop-content .shop-item.disabled{opacity:.4;cursor:not-allowed}",
+    "#cat-shop-content .shop-item.buy-success{animation:buyFlash .4s ease-out;pointer-events:none}",
+    "#cat-shop-content .shop-item.buy-fail{animation:buyFail .3s ease-out}",
+    "#cat-shop-content .shop-item.buy-cooldown{pointer-events:none;opacity:.7}",
     "#cat-shop-content .shop-item .item-info{flex:1;min-width:0}",
     "#cat-shop-content .shop-item .item-name{font-weight:600;font-size:12px}",
     "#cat-shop-content .shop-item .item-desc{font-size:10px;opacity:.7}",
     "#cat-shop-content .shop-item .item-cost{font-size:11px;white-space:nowrap;font-weight:600}",
     "#cat-shop-content .shop-item .item-owned{font-size:10px;opacity:.6;margin-left:4px}",
+    ".shop-tabs{display:flex;gap:2px;margin-bottom:12px;border-bottom:1px solid var(--color-border,rgba(255,255,255,.1));padding-bottom:6px}",
+    ".shop-tab{flex:1;text-align:center;padding:6px 4px;font-size:11px;cursor:pointer;border-radius:6px 6px 0 0;opacity:.6;transition:opacity .15s,background .15s}",
+    ".shop-tab:hover{background:var(--color-border,rgba(255,255,255,.05));opacity:.8}",
+    ".shop-tab.active{opacity:1;background:var(--color-border,rgba(255,255,255,.08));font-weight:600;border-bottom:2px solid var(--color-accent,#8eb95c)}",
     "@media(max-width:480px){#cat-currency-display{font-size:11px!important;line-height:1.6!important}#cat-currency-display span{font-size:9px!important}}",
     "@media(max-width:480px){#cat-shop-content .shop-item{padding:8px 6px}#cat-shop-content .shop-title{font-size:12px}}",
     "@media(max-width:480px){.neko-shop-btn{width:40px!important;height:40px!important;font-size:18px!important;top:8px!important;right:8px!important}}",
@@ -183,6 +212,11 @@
   let exchangeMode = "x1"; // x1, x10, max
   let autoAccum = 0;
   let sayTimeout = null;
+  let buyCooldown = false;
+  const BUY_COOLDOWN_MS = 400;
+  let currentShopTab = "shop";
+  let shopStructureBuilt = false;
+  let currencyExpanded = true;
 
   // ── Config: Economy ──
   const SAVE_KEY = "pixelCatEconomy";
@@ -290,6 +324,21 @@
     { id: "catnip",  name: "猫薄荷爱好者", targets: [1, 2],          rewardTreat: 1, rewardFood: 20,  desc: (n) => `使用 ${n} 次猫薄荷` },
     { id: "mood",    name: "快乐猫咪",   targets: [1],              rewardTreat: 2, rewardFood: 80,  desc: () => `心情达到 80 以上` },
   ];
+
+  const SHOP_TABS = [
+    { id: "shop",    icon: "🛒", label: "商店" },
+    { id: "quest",   icon: "📋", label: "任务" },
+    { id: "achieve", icon: "🏆", label: "成就" },
+    { id: "setting", icon: "⚙️", label: "设置" },
+  ];
+
+  const ESTATE_ICONS = {
+    nest:   { emoji: "🏠", x: -14, y: -8,  size: 12 },
+    garden: { emoji: "🌳", x: 14,  y: -8,  size: 12 },
+    shop:   { emoji: "🏪", x: -14, y: 56,  size: 12 },
+    castle: { emoji: "🏰", x: 14,  y: 56,  size: 12 },
+    planet: { emoji: "🌌", x: 0,   y: -16, size: 14 },
+  };
 
   const CAT_LEVELS = [
     { name: "小奶猫",   minFood: 0,      icon: "🐱" },
@@ -413,6 +462,9 @@
 
   // Initialize level tracking
   lastCatLevel = getCatLevel().name;
+
+  // Initialize estate display
+  updateEstateDisplay();
 
   // ── Economy: Daily Check-in ──
   function getTodayStr() {
@@ -674,6 +726,10 @@
       showAchievement({ icon: catLv.icon, name: `等级提升: ${catLv.name}`, desc: `累计赚取 ${fmtNum(eco.totalFoodEarned)} 猫粮` });
     }
     lastCatLevel = catLv.name;
+    if (!currencyExpanded) {
+      d.innerHTML = `<div style="font-weight:700">${catLv.icon} ${catLv.name} · 🐾${fmtNum(eco.catFood)} 🍖${fmtNum(eco.catTreat)} 🥫${fmtNum(eco.catCan)}</div>`;
+      return;
+    }
     d.innerHTML =
       `<div style="font-weight:700;margin-bottom:2px">${catLv.icon} ${catLv.name}</div>` +
       `<div>🐾 <b>${fmtNum(eco.catFood)}</b> 猫粮${effectiveRate > 0 ? ` <span style="opacity:.6;font-size:10px">(+${effectiveRate}/秒)</span>` : eventPaused ? ` <span style="color:#ff6b6b;font-size:10px">(暂停)</span>` : moodMult === 0 ? ` <span style="color:#ff6b6b;font-size:10px">(罢工)</span>` : ""}</div>` +
@@ -692,346 +748,426 @@
   }
 
   // ── UI: Shop Rendering ──
-  function renderShop() {
-    const c = document.getElementById("cat-shop-content");
-    if (!c) return;
-
+  function buildShopTab(tabId) {
     let html = "";
-
-    // Exchange section
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title" style="display:flex;align-items:center;justify-content:space-between">💱 兑换';
-    html += `<div style="display:flex;gap:3px">`;
-    for (const m of ["x1", "x10", "max"]) {
-      const active = exchangeMode === m;
-      html += `<button data-action="setMode" data-mode="${m}" style="padding:1px 6px;border-radius:4px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:${active ? "var(--color-text-primary)" : "transparent"};color:${active ? "var(--color-surface)" : "var(--color-text-primary)"};font-size:10px;cursor:pointer;font-weight:600">${m === "max" ? "MAX" : m}</button>`;
-    }
-    html += `</div></div>`;
-    for (const key of Object.keys(EXCHANGE)) {
-      const ex = getExchangeRate(key);
-      const count = getExchangeCount(key);
-      const canAfford = count > 0;
-      const cost = ex.fromAmt * (count || 1);
-      const gain = ex.toAmt * (count || 1);
-      const rateLabel = ex.from === "catFood" && ex.fromAmt < 100 ? `猫粮换猫条 (${ex.fromAmt}:1优惠)` : ex.from === "catFood" ? "猫粮换猫条" : "猫条换猫罐头";
-      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="exchange" data-key="${key}">` +
-        `<div class="item-info"><div class="item-name">${cost} ${ex.fromIcon} → ${gain} ${ex.toIcon}${count > 1 ? ` x${count}` : ""}</div>` +
-        `<div class="item-desc">${rateLabel}</div></div>` +
-        `<div class="item-cost">${fmtNum(cost)} ${ex.fromIcon}</div></div>`;
-    }
-    html += '</div>';
-
-    // Mood items
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">🌿 心情道具</div>';
-    const catnipCost = 3;
-    const canAffordCatnip = eco.catTreat >= catnipCost;
-    html += `<div class="shop-item${canAffordCatnip ? "" : " disabled"}" data-action="buyCatnip">` +
-      `<div class="item-info"><div class="item-name">🌿 猫薄荷</div>` +
-      `<div class="item-desc">心情满+产出x1.5持续60秒</div></div>` +
-      `<div class="item-cost">${catnipCost} 🍖</div></div>`;
-    const toyCost = 1;
-    const canAffordToy = eco.catTreat >= toyCost;
-    html += `<div class="shop-item${canAffordToy ? "" : " disabled"}" data-action="buyToy">` +
-      `<div class="item-info"><div class="item-name">🧸 毛绒玩具</div>` +
-      `<div class="item-desc">心情+30，玩5秒</div></div>` +
-      `<div class="item-cost">${toyCost} 🍖</div></div>`;
-    html += `<div style="font-size:10px;opacity:.5;text-align:center">当前心情: ${Math.round(mood)}/100${catnipBuff > 0 ? " 🌿x1.5" : ""}</div>`;
-    html += '</div>';
-
-    // Cosmetics
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">🎩 外观装饰</div>';
-    for (const cos of COSMETICS) {
-      const owned = (eco.ownedCosmetics || []).includes(cos.id);
-      const equipped = eco.equippedCosmetic === cos.id;
-      if (owned) {
-        html += `<div class="shop-item" data-action="equip" data-cosid="${cos.id}">` +
-          `<div class="item-info"><div class="item-name">${cos.name}</div>` +
-          `<div class="item-desc">${cos.desc}</div></div>` +
-          `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
-      } else {
-        const canAfford = eco.catCan >= cos.cost;
-        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="buyCosmetic" data-cosid="${cos.id}">` +
-          `<div class="item-info"><div class="item-name">${cos.name}</div>` +
-          `<div class="item-desc">${cos.desc}</div></div>` +
-          `<div class="item-cost">${cos.cost} 🥫</div></div>`;
+    if (tabId === "shop") {
+      // Exchange section
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title" style="display:flex;align-items:center;justify-content:space-between">💱 兑换';
+      html += `<div style="display:flex;gap:3px">`;
+      for (const m of ["x1", "x10", "max"]) {
+        const active = exchangeMode === m;
+        html += `<button data-action="setMode" data-mode="${m}" style="padding:1px 6px;border-radius:4px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:${active ? "var(--color-text-primary)" : "transparent"};color:${active ? "var(--color-surface)" : "var(--color-text-primary)"};font-size:10px;cursor:pointer;font-weight:600">${m === "max" ? "MAX" : m}</button>`;
       }
-    }
-    // Gacha/Planet cosmetics
-    const gachaCos = (eco.gachaCosmetics || []);
-    for (const shard of GACHA_SHARDS) {
-      if (gachaCos.includes(shard.id)) {
-        const equipped = eco.equippedCosmetic === shard.id;
-        html += `<div class="shop-item" data-action="equip" data-cosid="${shard.id}">` +
-          `<div class="item-info"><div class="item-name">${shard.name}</div>` +
-          `<div class="item-desc">${shard.desc} (抽奖获得)</div></div>` +
-          `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
+      html += `</div></div>`;
+      for (const key of Object.keys(EXCHANGE)) {
+        const ex = getExchangeRate(key);
+        const count = getExchangeCount(key);
+        const canAfford = count > 0;
+        const cost = ex.fromAmt * (count || 1);
+        const gain = ex.toAmt * (count || 1);
+        const rateLabel = ex.from === "catFood" && ex.fromAmt < 100 ? `猫粮换猫条 (${ex.fromAmt}:1优惠)` : ex.from === "catFood" ? "猫粮换猫条" : "猫条换猫罐头";
+        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="exchange" data-key="${key}">` +
+          `<div class="item-info"><div class="item-name">${cost} ${ex.fromIcon} → ${gain} ${ex.toIcon}${count > 1 ? ` x${count}` : ""}</div>` +
+          `<div class="item-desc">${rateLabel}</div></div>` +
+          `<div class="item-cost">${fmtNum(cost)} ${ex.fromIcon}</div></div>`;
       }
-    }
-    if (gachaCos.includes("planet")) {
-      const equipped = eco.equippedCosmetic === "planet";
-      html += `<div class="shop-item" data-action="equip" data-cosid="planet">` +
-        `<div class="item-info"><div class="item-name">🌌 星际猫</div>` +
-        `<div class="item-desc">星球领主专属 (地产获得)</div></div>` +
-        `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
-    }
-    html += '</div>';
+      html += '</div>';
 
-    // Auto-produce upgrades
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">⚙️ 自动产出</div>';
-    if (eco.autoLevel < UPGRADES.autoProduce.length) {
-      const up = UPGRADES.autoProduce[eco.autoLevel];
-      const canAfford = eco.catFood >= up.cost;
-      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="autoProduce">` +
-        `<div class="item-info"><div class="item-name">${up.name}</div>` +
-        `<div class="item-desc">${up.desc}</div></div>` +
-        `<div class="item-cost">${fmtNum(up.cost)} 🐾</div></div>`;
-    } else {
-      html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
-    }
-    if (eco.autoLevel > 0) {
-      html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: +${getAutoRate()}/秒 (x${getMultiplier()} = +${getEffectiveAutoRate()}/秒)</div>`;
-    }
-    html += '</div>';
+      // Mood items
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">🌿 心情道具</div>';
+      const catnipCost = 3;
+      const canAffordCatnip = eco.catTreat >= catnipCost;
+      html += `<div class="shop-item${canAffordCatnip ? "" : " disabled"}" data-action="buyCatnip">` +
+        `<div class="item-info"><div class="item-name">🌿 猫薄荷</div>` +
+        `<div class="item-desc">心情满+产出x1.5持续60秒</div></div>` +
+        `<div class="item-cost">${catnipCost} 🍖</div></div>`;
+      const toyCost = 1;
+      const canAffordToy = eco.catTreat >= toyCost;
+      html += `<div class="shop-item${canAffordToy ? "" : " disabled"}" data-action="buyToy">` +
+        `<div class="item-info"><div class="item-name">🧸 毛绒玩具</div>` +
+        `<div class="item-desc">心情+30，玩5秒</div></div>` +
+        `<div class="item-cost">${toyCost} 🍖</div></div>`;
+      html += `<div style="font-size:10px;opacity:.5;text-align:center">当前心情: ${Math.round(mood)}/100${catnipBuff > 0 ? " 🌿x1.5" : ""}</div>`;
+      html += '</div>';
 
-    // Click power upgrades
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">👆 点击加成</div>';
-    if (eco.clickLevel < UPGRADES.clickPower.length) {
-      const up = UPGRADES.clickPower[eco.clickLevel];
-      const canAfford = eco.catTreat >= up.cost;
-      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="clickPower">` +
-        `<div class="item-info"><div class="item-name">${up.name}</div>` +
-        `<div class="item-desc">${up.desc}</div></div>` +
-        `<div class="item-cost">${up.cost} 🍖</div></div>`;
-    } else {
-      html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
-    }
-    if (eco.clickLevel > 0) {
-      html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: 点击 +${getClickPower()} (x${getMultiplier()} = +${getEffectiveClickPower()})</div>`;
-    }
-    html += '</div>';
-
-    // Multiplier upgrades
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">🥫 产出倍率</div>';
-    if (eco.multLevel < UPGRADES.multiplier.length) {
-      const up = UPGRADES.multiplier[eco.multLevel];
-      const canAfford = eco.catCan >= up.cost;
-      html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="multiplier">` +
-        `<div class="item-info"><div class="item-name">${up.name}</div>` +
-        `<div class="item-desc">${up.desc}</div></div>` +
-        `<div class="item-cost">${up.cost} 🥫</div></div>`;
-    } else {
-      html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
-    }
-    if (eco.multLevel > 0) {
-      html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: x${getMultiplier()}</div>`;
-    }
-    html += '</div>';
-
-    // Cat Skills
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">🧬 猫咪技能</div>';
-    for (const skill of SKILLS) {
-      const lvl = eco[skill.id] || 0;
-      if (lvl < skill.levels.length) {
-        const sl = skill.levels[lvl];
-        const canAfford = eco.catCan >= sl.cost;
-        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgradeSkill" data-skillid="${skill.id}">` +
-          `<div class="item-info"><div class="item-name">${skill.name} Lv.${lvl}</div>` +
-          `<div class="item-desc">${sl.desc}</div></div>` +
-          `<div class="item-cost">${sl.cost} 🥫</div></div>`;
-      } else {
-        html += `<div style="opacity:.5;text-align:center;padding:4px;font-size:11px">${skill.name} ✅ Lv.MAX</div>`;
+      // Cosmetics
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">🎩 外观装饰</div>';
+      for (const cos of COSMETICS) {
+        const owned = (eco.ownedCosmetics || []).includes(cos.id);
+        const equipped = eco.equippedCosmetic === cos.id;
+        if (owned) {
+          html += `<div class="shop-item" data-action="equip" data-cosid="${cos.id}">` +
+            `<div class="item-info"><div class="item-name">${cos.name}</div>` +
+            `<div class="item-desc">${cos.desc}</div></div>` +
+            `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
+        } else {
+          const canAfford = eco.catCan >= cos.cost;
+          html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="buyCosmetic" data-cosid="${cos.id}">` +
+            `<div class="item-info"><div class="item-name">${cos.name}</div>` +
+            `<div class="item-desc">${cos.desc}</div></div>` +
+            `<div class="item-cost">${cos.cost} 🥫</div></div>`;
+        }
       }
-    }
-    html += '</div>';
-
-    // Real Estate
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">🏘️ 猫咪地产</div>';
-    const ownedEstate = eco.ownedEstate || [];
-    for (const estate of REAL_ESTATE) {
-      if (ownedEstate.includes(estate.id)) {
-        html += `<div style="opacity:.5;text-align:center;padding:4px;font-size:11px">${estate.name} ✅ ${estate.desc}</div>`;
-      } else {
-        const canAfford = eco.catFood >= estate.cost;
-        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="buyEstate" data-estateid="${estate.id}">` +
-          `<div class="item-info"><div class="item-name">${estate.name}</div>` +
-          `<div class="item-desc">${estate.desc}</div></div>` +
-          `<div class="item-cost">${fmtNum(estate.cost)} 🐾</div></div>`;
-      }
-    }
-    html += '</div>';
-
-    // Gacha
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">🎰 猫咪抽奖</div>';
-    const canNormal = eco.catCan >= GACHA_NORMAL_COST;
-    const canPremium = eco.catCan >= GACHA_PREMIUM_COST;
-    html += `<div class="shop-item${canNormal ? "" : " disabled"}" data-action="gacha" data-premium="0">` +
-      `<div class="item-info"><div class="item-name">🎰 普通抽奖</div>` +
-      `<div class="item-desc">猫粮/猫条/碎片</div></div>` +
-      `<div class="item-cost">${GACHA_NORMAL_COST} 🥫</div></div>`;
-    html += `<div class="shop-item${canPremium ? "" : " disabled"}" data-action="gacha" data-premium="1">` +
-      `<div class="item-info"><div class="item-name">🎰✨ 豪华抽奖</div>` +
-      `<div class="item-desc">更高稀有度+保底碎片</div></div>` +
-      `<div class="item-cost">${GACHA_PREMIUM_COST} 🥫</div></div>`;
-    // Show shard progress
-    if (eco.gachaShards && Object.keys(eco.gachaShards).length > 0) {
-      html += '<div style="font-size:10px;opacity:.6;margin-top:4px">';
+      const gachaCos = (eco.gachaCosmetics || []);
       for (const shard of GACHA_SHARDS) {
-        const count = eco.gachaShards[shard.id] || 0;
-        if (count > 0) {
-          const done = (eco.gachaCosmetics || []).includes(shard.id);
-          html += `${shard.name}: ${done ? "✅" : `${count}/${shard.pieces}`} `;
+        if (gachaCos.includes(shard.id)) {
+          const equipped = eco.equippedCosmetic === shard.id;
+          html += `<div class="shop-item" data-action="equip" data-cosid="${shard.id}">` +
+            `<div class="item-info"><div class="item-name">${shard.name}</div>` +
+            `<div class="item-desc">${shard.desc} (抽奖获得)</div></div>` +
+            `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
+        }
+      }
+      if (gachaCos.includes("planet")) {
+        const equipped = eco.equippedCosmetic === "planet";
+        html += `<div class="shop-item" data-action="equip" data-cosid="planet">` +
+          `<div class="item-info"><div class="item-name">🌌 星际猫</div>` +
+          `<div class="item-desc">星球领主专属 (地产获得)</div></div>` +
+          `<div style="font-size:11px;white-space:nowrap;font-weight:600">${equipped ? "✅ 穿戴中" : "点击穿戴"}</div></div>`;
+      }
+      html += '</div>';
+
+      // Auto-produce upgrades
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">⚙️ 自动产出</div>';
+      if (eco.autoLevel < UPGRADES.autoProduce.length) {
+        const up = UPGRADES.autoProduce[eco.autoLevel];
+        const canAfford = eco.catFood >= up.cost;
+        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="autoProduce">` +
+          `<div class="item-info"><div class="item-name">${up.name}</div>` +
+          `<div class="item-desc">${up.desc}</div></div>` +
+          `<div class="item-cost">${fmtNum(up.cost)} 🐾</div></div>`;
+      } else {
+        html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
+      }
+      if (eco.autoLevel > 0) {
+        html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: +${getAutoRate()}/秒 (x${getMultiplier()} = +${getEffectiveAutoRate()}/秒)</div>`;
+      }
+      html += '</div>';
+
+      // Click power upgrades
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">👆 点击加成</div>';
+      if (eco.clickLevel < UPGRADES.clickPower.length) {
+        const up = UPGRADES.clickPower[eco.clickLevel];
+        const canAfford = eco.catTreat >= up.cost;
+        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="clickPower">` +
+          `<div class="item-info"><div class="item-name">${up.name}</div>` +
+          `<div class="item-desc">${up.desc}</div></div>` +
+          `<div class="item-cost">${up.cost} 🍖</div></div>`;
+      } else {
+        html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
+      }
+      if (eco.clickLevel > 0) {
+        html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: 点击 +${getClickPower()} (x${getMultiplier()} = +${getEffectiveClickPower()})</div>`;
+      }
+      html += '</div>';
+
+      // Multiplier upgrades
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">🥫 产出倍率</div>';
+      if (eco.multLevel < UPGRADES.multiplier.length) {
+        const up = UPGRADES.multiplier[eco.multLevel];
+        const canAfford = eco.catCan >= up.cost;
+        html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgrade" data-type="multiplier">` +
+          `<div class="item-info"><div class="item-name">${up.name}</div>` +
+          `<div class="item-desc">${up.desc}</div></div>` +
+          `<div class="item-cost">${up.cost} 🥫</div></div>`;
+      } else {
+        html += '<div style="opacity:.5;text-align:center;padding:6px;font-size:11px">✅ 已全部解锁</div>';
+      }
+      if (eco.multLevel > 0) {
+        html += `<div style="font-size:10px;opacity:.5;text-align:center">当前: x${getMultiplier()}</div>`;
+      }
+      html += '</div>';
+
+      // Cat Skills
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">🧬 猫咪技能</div>';
+      for (const skill of SKILLS) {
+        const lvl = eco[skill.id] || 0;
+        if (lvl < skill.levels.length) {
+          const sl = skill.levels[lvl];
+          const canAfford = eco.catCan >= sl.cost;
+          html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="upgradeSkill" data-skillid="${skill.id}">` +
+            `<div class="item-info"><div class="item-name">${skill.name} Lv.${lvl}</div>` +
+            `<div class="item-desc">${sl.desc}</div></div>` +
+            `<div class="item-cost">${sl.cost} 🥫</div></div>`;
+        } else {
+          html += `<div style="opacity:.5;text-align:center;padding:4px;font-size:11px">${skill.name} ✅ Lv.MAX</div>`;
         }
       }
       html += '</div>';
-    }
-    html += '</div>';
 
-    // Stats
-    html += '<div style="font-size:10px;opacity:.4;text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border,rgba(255,255,255,.1))">' +
-      `累计赚取 ${fmtNum(eco.totalFoodEarned)} 猫粮 | 点击 ${eco.totalClicks || 0} 次</div>`;
+      // Real Estate
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">🏘️ 猫咪地产</div>';
+      const ownedEstate = eco.ownedEstate || [];
+      for (const estate of REAL_ESTATE) {
+        if (ownedEstate.includes(estate.id)) {
+          html += `<div style="opacity:.5;text-align:center;padding:4px;font-size:11px">${estate.name} ✅ ${estate.desc}</div>`;
+        } else {
+          const canAfford = eco.catFood >= estate.cost;
+          html += `<div class="shop-item${canAfford ? "" : " disabled"}" data-action="buyEstate" data-estateid="${estate.id}">` +
+            `<div class="item-info"><div class="item-name">${estate.name}</div>` +
+            `<div class="item-desc">${estate.desc}</div></div>` +
+            `<div class="item-cost">${fmtNum(estate.cost)} 🐾</div></div>`;
+        }
+      }
+      html += '</div>';
 
-    // Achievements
-    if (eco.unlockedAch && eco.unlockedAch.length > 0) {
+      // Gacha
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">🎰 猫咪抽奖</div>';
+      const canNormal = eco.catCan >= GACHA_NORMAL_COST;
+      const canPremium = eco.catCan >= GACHA_PREMIUM_COST;
+      html += `<div class="shop-item${canNormal ? "" : " disabled"}" data-action="gacha" data-premium="0">` +
+        `<div class="item-info"><div class="item-name">🎰 普通抽奖</div>` +
+        `<div class="item-desc">猫粮/猫条/碎片</div></div>` +
+        `<div class="item-cost">${GACHA_NORMAL_COST} 🥫</div></div>`;
+      html += `<div class="shop-item${canPremium ? "" : " disabled"}" data-action="gacha" data-premium="1">` +
+        `<div class="item-info"><div class="item-name">🎰✨ 豪华抽奖</div>` +
+        `<div class="item-desc">更高稀有度+保底碎片</div></div>` +
+        `<div class="item-cost">${GACHA_PREMIUM_COST} 🥫</div></div>`;
+      if (eco.gachaShards && Object.keys(eco.gachaShards).length > 0) {
+        html += '<div style="font-size:10px;opacity:.6;margin-top:4px">';
+        for (const shard of GACHA_SHARDS) {
+          const count = eco.gachaShards[shard.id] || 0;
+          if (count > 0) {
+            const done = (eco.gachaCosmetics || []).includes(shard.id);
+            html += `${shard.name}: ${done ? "✅" : `${count}/${shard.pieces}`} `;
+          }
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Stats
+      html += '<div style="font-size:10px;opacity:.4;text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border,rgba(255,255,255,.1))">' +
+        `累计赚取 ${fmtNum(eco.totalFoodEarned)} 猫粮 | 点击 ${eco.totalClicks || 0} 次</div>`;
+
+    } else if (tabId === "quest") {
+      // Daily Check-in
+      const today = getTodayStr();
+      const alreadyChecked = eco.lastCheckin === today;
+      const streak = eco.checkinStreak || 0;
+      const checkinBonus = Math.min(10 + streak * 5, 50);
+      const nextBonus = Math.min(10 + (streak + 1) * 5, 50);
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">📅 每日签到</div>';
+      if (alreadyChecked) {
+        html += `<div style="font-size:11px;opacity:.7">今日已签到 · 连续${streak}天</div>`;
+        html += `<div style="font-size:10px;opacity:.5;margin-top:2px">明日可领 +${nextBonus}🐾</div>`;
+      } else {
+        html += `<div style="font-size:11px">连续${streak}天 · 本次可领 +${checkinBonus}🐾</div>`;
+        html += `<button data-action="checkin" style="margin-top:4px;width:100%;padding:6px;border-radius:8px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:var(--color-text-primary);color:var(--color-surface);font-size:12px;cursor:pointer;font-weight:600">📅 签到领取 +${checkinBonus}🐾</button>`;
+      }
+      html += '</div>';
+
+      // Daily Quests
+      ensureDailyQuests();
+      const dq = eco.dailyQuests;
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">📋 每日任务</div>';
+      if (dq && dq.quests) {
+        for (let i = 0; i < dq.quests.length; i++) {
+          const q = dq.quests[i];
+          const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+          const done = q.progress >= q.target;
+          if (q.claimed) {
+            html += `<div style="padding:4px 0;font-size:11px;opacity:.5">✅ ${q.desc}</div>`;
+          } else if (done) {
+            html += `<div style="padding:4px 0;font-size:11px;display:flex;align-items:center;justify-content:space-between">` +
+              `<span>${q.desc} ✅</span>` +
+              `<button data-action="claimQuest" data-qindex="${i}" style="padding:2px 8px;border-radius:4px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:var(--color-text-primary);color:var(--color-surface);font-size:10px;cursor:pointer;font-weight:600">领取</button></div>`;
+          } else {
+            html += `<div style="padding:4px 0;font-size:11px">` +
+              `<div style="display:flex;justify-content:space-between"><span>${q.desc}</span><span style="opacity:.6">${q.progress}/${q.target}</span></div>` +
+              `<div style="margin-top:2px;height:4px;border-radius:2px;background:var(--color-border,rgba(255,255,255,.1));overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--color-accent,#8eb95c);border-radius:2px;transition:width .3s"></div></div></div>`;
+          }
+        }
+        if (dq.allClaimed) {
+          html += `<div style="font-size:10px;opacity:.6;text-align:center;margin-top:4px">🎉 全部完成! +1🥫</div>`;
+        } else if (!dq.quests.every(q2 => q2.claimed)) {
+          const claimed = dq.quests.filter(q2 => q2.claimed).length;
+          html += `<div style="font-size:10px;opacity:.5;text-align:center;margin-top:4px">完成 ${claimed}/3 · 全部完成额外 +1🥫</div>`;
+        }
+      }
+      html += '</div>';
+
+    } else if (tabId === "achieve") {
+      // Achievements (always show all)
       html += '<div class="shop-section">';
       html += '<div class="shop-title">🏆 成就</div>';
       for (const ach of ACHIEVEMENTS) {
-        const unlocked = eco.unlockedAch.includes(ach.id);
+        const unlocked = (eco.unlockedAch || []).includes(ach.id);
         html += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;${unlocked ? "" : "opacity:.3"}">` +
           `<span>${ach.icon}</span><span style="font-weight:600">${ach.name}</span>` +
           `<span style="font-size:9px;opacity:.6;margin-left:auto">${unlocked ? "✅" : ach.desc}</span></div>`;
       }
       html += '</div>';
+
+      // Personal Records
+      const lv = getCatLevel();
+      const streak = eco.checkinStreak || 0;
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">📊 个人记录</div>';
+      html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>最高累计</span><b>${fmtNum(eco.highScore || 0)} 🐾</b></div>`;
+      html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>当前等级</span><b>${lv.icon} ${lv.name}</b></div>`;
+      html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>签到连续</span><b>${streak} 天</b></div>`;
+      html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>总点击</span><b>${fmtNum(eco.totalClicks || 0)}</b></div>`;
+      html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>事件触发</span><b>${eco.eventCount || 0}</b></div>`;
+      html += '</div>';
+
+      // Share
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">📤 分享</div>';
+      html += '<button data-action="share" style="width:100%;padding:6px;border-radius:8px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:transparent;color:var(--color-text-primary);font-size:11px;cursor:pointer">📋 复制猫咪状态</button>';
+      html += '</div>';
+
+    } else if (tabId === "setting") {
+      html += '<div class="shop-section">';
+      html += '<div class="shop-title">⚙️ 设置</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+      html += '<button data-action="exportSave" style="flex:1;min-width:70px;padding:4px 8px;border-radius:6px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:transparent;color:var(--color-text-primary);font-size:10px;cursor:pointer">📤 导出</button>';
+      html += '<button data-action="importSave" style="flex:1;min-width:70px;padding:4px 8px;border-radius:6px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:transparent;color:var(--color-text-primary);font-size:10px;cursor:pointer">📥 导入</button>';
+      html += '<button data-action="resetSave" style="flex:1;min-width:70px;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,80,80,.4);background:transparent;color:#ff5050;font-size:10px;cursor:pointer">🗑️ 重置</button>';
+      html += '</div></div>';
     }
+    return html;
+  }
 
-    // Daily Check-in
-    const today = getTodayStr();
-    const alreadyChecked = eco.lastCheckin === today;
-    const streak = eco.checkinStreak || 0;
-    const checkinBonus = Math.min(10 + streak * 5, 50); // after signing, streak becomes streak+1, bonus = 10+streak*5
-    const nextBonus = Math.min(10 + (streak + 1) * 5, 50);
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">📅 每日签到</div>';
-    if (alreadyChecked) {
-      html += `<div style="font-size:11px;opacity:.7">今日已签到 · 连续${streak}天</div>`;
-      html += `<div style="font-size:10px;opacity:.5;margin-top:2px">明日可领 +${nextBonus}🐾</div>`;
-    } else {
-      html += `<div style="font-size:11px">连续${streak}天 · 本次可领 +${checkinBonus}🐾</div>`;
-      html += `<button data-action="checkin" style="margin-top:4px;width:100%;padding:6px;border-radius:8px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:var(--color-text-primary);color:var(--color-surface);font-size:12px;cursor:pointer;font-weight:600">📅 签到领取 +${checkinBonus}🐾</button>`;
-    }
-    html += '</div>';
+  function bindShopEvents() {
+    const c = document.getElementById("cat-shop-content");
+    if (!c) return;
 
-    // Daily Quests
-    ensureDailyQuests();
-    const dq = eco.dailyQuests;
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">📋 每日任务</div>';
-    if (dq && dq.quests) {
-      for (let i = 0; i < dq.quests.length; i++) {
-        const q = dq.quests[i];
-        const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
-        const done = q.progress >= q.target;
-        if (q.claimed) {
-          html += `<div style="padding:4px 0;font-size:11px;opacity:.5">✅ ${q.desc}</div>`;
-        } else if (done) {
-          html += `<div style="padding:4px 0;font-size:11px;display:flex;align-items:center;justify-content:space-between">` +
-            `<span>${q.desc} ✅</span>` +
-            `<button data-action="claimQuest" data-qindex="${i}" style="padding:2px 8px;border-radius:4px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:var(--color-text-primary);color:var(--color-surface);font-size:10px;cursor:pointer;font-weight:600">领取</button></div>`;
-        } else {
-          html += `<div style="padding:4px 0;font-size:11px">` +
-            `<div style="display:flex;justify-content:space-between"><span>${q.desc}</span><span style="opacity:.6">${q.progress}/${q.target}</span></div>` +
-            `<div style="margin-top:2px;height:4px;border-radius:2px;background:var(--color-border,rgba(255,255,255,.1));overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--color-accent,#8eb95c);border-radius:2px;transition:width .3s"></div></div></div>`;
-        }
-      }
-      if (dq.allClaimed) {
-        html += `<div style="font-size:10px;opacity:.6;text-align:center;margin-top:4px">🎉 全部完成! +1🥫</div>`;
-      } else if (dq.quests.every(q2 => q2.claimed) && !dq.allClaimed) {
-        // This shouldn't happen but just in case
-      } else {
-        const claimed = dq.quests.filter(q2 => q2.claimed).length;
-        html += `<div style="font-size:10px;opacity:.5;text-align:center;margin-top:4px">完成 ${claimed}/3 · 全部完成额外 +1🥫</div>`;
-      }
-    }
-    html += '</div>';
-
-    // Leaderboard (local)
-    const lv = getCatLevel();
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">🏆 个人记录</div>';
-    html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>最高累计</span><b>${fmtNum(eco.highScore || 0)} 🐾</b></div>`;
-    html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>当前等级</span><b>${lv.icon} ${lv.name}</b></div>`;
-    html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>签到连续</span><b>${streak} 天</b></div>`;
-    html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>总点击</span><b>${fmtNum(eco.totalClicks || 0)}</b></div>`;
-    html += `<div style="font-size:11px;display:flex;justify-content:space-between"><span>事件触发</span><b>${eco.eventCount || 0}</b></div>`;
-    html += '</div>';
-
-    // Share
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">📤 分享</div>';
-    html += '<button data-action="share" style="width:100%;padding:6px;border-radius:8px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:transparent;color:var(--color-text-primary);font-size:11px;cursor:pointer">📋 复制猫咪状态</button>';
-    html += '</div>';
-
-    // Settings
-    html += '<div class="shop-section">';
-    html += '<div class="shop-title">⚙️ 设置</div>';
-    html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-    html += '<button data-action="exportSave" style="flex:1;min-width:70px;padding:4px 8px;border-radius:6px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:transparent;color:var(--color-text-primary);font-size:10px;cursor:pointer">📤 导出</button>';
-    html += '<button data-action="importSave" style="flex:1;min-width:70px;padding:4px 8px;border-radius:6px;border:1px solid var(--color-border,rgba(255,255,255,.2));background:transparent;color:var(--color-text-primary);font-size:10px;cursor:pointer">📥 导入</button>';
-    html += '<button data-action="resetSave" style="flex:1;min-width:70px;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,80,80,.4);background:transparent;color:#ff5050;font-size:10px;cursor:pointer">🗑️ 重置</button>';
-    html += '</div></div>';
-
-    c.innerHTML = html;
-
-    // Bind click events
-    c.querySelectorAll(".shop-item:not(.disabled)").forEach(item => {
-      item.onclick = (e) => {
+    // Tab clicks
+    c.querySelectorAll(".shop-tab").forEach(tab => {
+      tab.onclick = (e) => {
         e.stopPropagation();
-        const action = item.dataset.action;
-        if (action === "exchange") doExchange(item.dataset.key);
-        else if (action === "upgrade") doUpgrade(item.dataset.type);
-        else if (action === "buyCatnip") doBuyCatnip();
-        else if (action === "buyToy") doBuyToy();
-        else if (action === "buyCosmetic") doBuyCosmetic(item.dataset.cosid);
-        else if (action === "equip") doEquipCosmetic(item.dataset.cosid);
-        else if (action === "upgradeSkill") doUpgradeSkill(item.dataset.skillid);
-        else if (action === "buyEstate") doBuyEstate(item.dataset.estateid);
-        else if (action === "gacha") doGacha(item.dataset.premium === "1");
+        currentShopTab = tab.dataset.tab;
+        // Update tab highlights
+        c.querySelectorAll(".shop-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === currentShopTab));
+        // Rebuild tab content
+        const body = document.getElementById("shop-tab-body");
+        if (body) { body.innerHTML = buildShopTab(currentShopTab); bindTabBodyEvents(); }
       };
     });
-    // Bind mode toggle buttons
-    c.querySelectorAll("[data-action='setMode']").forEach(btn => {
+
+    bindTabBodyEvents();
+  }
+
+  function bindTabBodyEvents() {
+    const body = document.getElementById("shop-tab-body");
+    if (!body) return;
+
+    // Shop item clicks with buy feedback
+    body.querySelectorAll(".shop-item:not(.disabled)").forEach(item => {
+      item.onclick = (e) => {
+        e.stopPropagation();
+        if (buyCooldown) return;
+        const action = item.dataset.action;
+        let success = false;
+        if (action === "exchange") success = doExchange(item.dataset.key);
+        else if (action === "upgrade") success = doUpgrade(item.dataset.type);
+        else if (action === "buyCatnip") success = doBuyCatnip();
+        else if (action === "buyToy") success = doBuyToy();
+        else if (action === "buyCosmetic") success = doBuyCosmetic(item.dataset.cosid);
+        else if (action === "equip") { doEquipCosmetic(item.dataset.cosid); return; }
+        else if (action === "upgradeSkill") success = doUpgradeSkill(item.dataset.skillid);
+        else if (action === "buyEstate") success = doBuyEstate(item.dataset.estateid);
+        else if (action === "gacha") success = doGacha(item.dataset.premium === "1");
+        else return;
+
+        if (success) {
+          item.classList.add("buy-success");
+          spawnBuyParticles(item);
+        }
+        buyCooldown = true;
+        item.classList.add("buy-cooldown");
+        setTimeout(() => {
+          item.classList.remove("buy-success", "buy-cooldown");
+          buyCooldown = false;
+          // Rebuild current tab to reflect changes
+          const b = document.getElementById("shop-tab-body");
+          if (b) { b.innerHTML = buildShopTab(currentShopTab); bindTabBodyEvents(); }
+        }, BUY_COOLDOWN_MS);
+      };
+    });
+
+    // Mode toggle buttons
+    body.querySelectorAll("[data-action='setMode']").forEach(btn => {
       btn.onclick = (e) => {
         e.stopPropagation();
         exchangeMode = btn.dataset.mode;
-        renderShop();
+        const b = document.getElementById("shop-tab-body");
+        if (b) { b.innerHTML = buildShopTab(currentShopTab); bindTabBodyEvents(); }
       };
     });
-    // Bind settings buttons
-    c.querySelectorAll("[data-action='exportSave']").forEach(btn => {
+
+    // Settings buttons
+    body.querySelectorAll("[data-action='exportSave']").forEach(btn => {
       btn.onclick = (e) => { e.stopPropagation(); doExportSave(); };
     });
-    c.querySelectorAll("[data-action='importSave']").forEach(btn => {
+    body.querySelectorAll("[data-action='importSave']").forEach(btn => {
       btn.onclick = (e) => { e.stopPropagation(); doImportSave(); };
     });
-    c.querySelectorAll("[data-action='resetSave']").forEach(btn => {
+    body.querySelectorAll("[data-action='resetSave']").forEach(btn => {
       btn.onclick = (e) => { e.stopPropagation(); doResetSave(); };
     });
-    c.querySelectorAll("[data-action='checkin']").forEach(btn => {
-      btn.onclick = (e) => { e.stopPropagation(); doCheckin(); renderShop(); };
+    body.querySelectorAll("[data-action='checkin']").forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); doCheckin(); const b = document.getElementById("shop-tab-body"); if (b) { b.innerHTML = buildShopTab(currentShopTab); bindTabBodyEvents(); } };
     });
-    c.querySelectorAll("[data-action='claimQuest']").forEach(btn => {
-      btn.onclick = (e) => { e.stopPropagation(); claimQuest(parseInt(btn.dataset.qindex)); };
+    body.querySelectorAll("[data-action='claimQuest']").forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); claimQuest(parseInt(btn.dataset.qindex)); const b = document.getElementById("shop-tab-body"); if (b) { b.innerHTML = buildShopTab(currentShopTab); bindTabBodyEvents(); } };
     });
-    c.querySelectorAll("[data-action='share']").forEach(btn => {
+    body.querySelectorAll("[data-action='share']").forEach(btn => {
       btn.onclick = (e) => { e.stopPropagation(); doShare(); };
     });
+  }
+
+  function renderShop() {
+    const c = document.getElementById("cat-shop-content");
+    if (!c) return;
+
+    // Build tab bar + content
+    let html = '<div class="shop-tabs">';
+    for (const tab of SHOP_TABS) {
+      html += `<div class="shop-tab${currentShopTab === tab.id ? " active" : ""}" data-tab="${tab.id}">${tab.icon} ${tab.label}</div>`;
+    }
+    html += '</div>';
+    html += `<div id="shop-tab-body">${buildShopTab(currentShopTab)}</div>`;
+
+    c.innerHTML = html;
+    shopStructureBuilt = true;
+    bindShopEvents();
+  }
+
+  function updateShopData() {
+    // Lightweight update: just rebuild current tab content (avoids full DOM rebuild flicker)
+    const body = document.getElementById("shop-tab-body");
+    if (body) {
+      body.innerHTML = buildShopTab(currentShopTab);
+      bindTabBodyEvents();
+    }
+  }
+
+  function spawnBuyParticles(itemEl) {
+    const rect = itemEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    for (let i = 0; i < 4; i++) {
+      const p = document.createElement("span");
+      p.textContent = "✦";
+      const angle = (Math.PI * 2 / 4) * i;
+      const dist = 15;
+      p.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;font-size:10px;pointer-events:none;animation:particleBurst .5s ease-out forwards;--px:${Math.cos(angle)*dist}px;--py:${Math.sin(angle)*dist}px;color:#8eb95c;z-index:1000;`;
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 500);
+    }
   }
 
   function doExportSave() {
@@ -1063,8 +1199,9 @@
       saveEconomy();
       say("存档恢复成功~");
       spawnParticles("sparkle");
-      renderShop();
+      if (shopOpen) renderShop();
       updateCurrencyDisplay();
+      updateEstateDisplay();
     } catch (e) {
       say("存档数据损坏喵...");
     }
@@ -1081,8 +1218,9 @@
     saveEconomy();
     say("一切从头开始...");
     spawnParticles("sad");
-    renderShop();
+    if (shopOpen) renderShop();
     updateCurrencyDisplay();
+    updateEstateDisplay();
   }
 
   function doShare() {
@@ -1153,30 +1291,27 @@
       spawnParticles("star");
     }
     saveEconomy();
-    renderShop();
   }
-
-  // Initialize daily quests on load
   ensureDailyQuests();
 
   function doBuyCatnip() {
     const cost = 3;
-    if (eco.catTreat < cost) return;
+    if (eco.catTreat < cost) return false;
     eco.catTreat -= cost;
     mood = 100;
-    catnipBuff = 60000; // 60s production buff
+    catnipBuff = 60000;
     state = "roll";
     say("喵喵喵~好嗨!");
     spawnParticles("heart");
     updateQuestProgress("catnip", 1);
     setTimeout(() => { state = "sit"; }, 5000);
     saveEconomy();
-    renderShop();
+    return true;
   }
 
   function doBuyToy() {
     const cost = 1;
-    if (eco.catTreat < cost) return;
+    if (eco.catTreat < cost) return false;
     eco.catTreat -= cost;
     mood = Math.min(100, mood + 30);
     state = "roll";
@@ -1184,13 +1319,13 @@
     spawnParticles("heart");
     setTimeout(() => { state = "sit"; }, 5000);
     saveEconomy();
-    renderShop();
+    return true;
   }
 
   function doBuyCosmetic(cosId) {
     const cos = COSMETICS.find(c => c.id === cosId);
-    if (!cos || eco.catCan < cos.cost) return;
-    if ((eco.ownedCosmetics || []).includes(cosId)) return;
+    if (!cos || eco.catCan < cos.cost) return false;
+    if ((eco.ownedCosmetics || []).includes(cosId)) return false;
     eco.catCan -= cos.cost;
     if (!eco.ownedCosmetics) eco.ownedCosmetics = [];
     eco.ownedCosmetics.push(cosId);
@@ -1198,7 +1333,7 @@
     say("好看吗~?");
     spawnParticles("star");
     saveEconomy();
-    renderShop();
+    return true;
   }
 
   function doEquipCosmetic(cosId) {
@@ -1210,30 +1345,29 @@
       say("换上新装!");
     }
     saveEconomy();
-    renderShop();
   }
 
   function doUpgradeSkill(skillId) {
     const skill = SKILLS.find(s => s.id === skillId);
-    if (!skill) return;
+    if (!skill) return false;
     const lvl = eco[skillId] || 0;
-    if (lvl >= skill.levels.length) return;
+    if (lvl >= skill.levels.length) return false;
     const sl = skill.levels[lvl];
-    if (eco.catCan < sl.cost) return;
+    if (eco.catCan < sl.cost) return false;
     eco.catCan -= sl.cost;
     eco[skillId] = lvl + 1;
     say(sl.say);
     spawnParticles("star");
     saveEconomy();
-    renderShop();
+    return true;
   }
 
   // ── Real Estate: Purchase ──
   function doBuyEstate(estateId) {
     const estate = REAL_ESTATE.find(e => e.id === estateId);
-    if (!estate) return;
-    if ((eco.ownedEstate || []).includes(estateId)) return;
-    if (eco.catFood < estate.cost) return;
+    if (!estate) return false;
+    if ((eco.ownedEstate || []).includes(estateId)) return false;
+    if (eco.catFood < estate.cost) return false;
     eco.catFood -= estate.cost;
     if (!eco.ownedEstate) eco.ownedEstate = [];
     eco.ownedEstate.push(estateId);
@@ -1245,7 +1379,8 @@
       if (!eco.gachaCosmetics.includes("planet")) eco.gachaCosmetics.push("planet");
     }
     saveEconomy();
-    renderShop();
+    updateEstateDisplay();
+    return true;
   }
 
   // ── Gacha: Roll ──
@@ -1261,7 +1396,7 @@
 
   function doGacha(premium) {
     const cost = premium ? GACHA_PREMIUM_COST : GACHA_NORMAL_COST;
-    if (eco.catCan < cost) return;
+    if (eco.catCan < cost) return false;
     eco.catCan -= cost;
     const table = premium ? GACHA_PREMIUM : GACHA_NORMAL;
     const result = rollGacha(table);
@@ -1305,9 +1440,9 @@
     say(rewardText);
     spawnParticles(type === "jackpot" ? "star" : type === "shard_guarantee" ? "sparkle" : "heart");
     saveEconomy();
-    renderShop();
     // Show gacha result notification
     showGachaResult(rewardText, premium);
+    return true;
   }
 
   function showGachaResult(text, premium) {
@@ -1339,13 +1474,13 @@
   function doExchange(key) {
     const ex = getExchangeRate(key);
     const count = getExchangeCount(key);
-    if (count <= 0) return;
+    if (count <= 0) return false;
     eco[ex.from] -= ex.fromAmt * count;
     eco[ex.to] += ex.toAmt * count;
     say(count > 1 ? `${count}x ${ex.say}` : ex.say);
     spawnParticles("star");
     saveEconomy();
-    renderShop();
+    return true;
   }
 
   function doUpgrade(type) {
@@ -1354,10 +1489,10 @@
     if (type === "autoProduce") levelKey = "autoLevel";
     else if (type === "clickPower") levelKey = "clickLevel";
     else if (type === "multiplier") levelKey = "multLevel";
-    else return;
+    else return false;
 
     const lvl = eco[levelKey];
-    if (lvl >= list.length) return;
+    if (lvl >= list.length) return false;
     const up = list[lvl];
 
     // Check currency
@@ -1365,9 +1500,9 @@
     if (type === "autoProduce") currencyKey = "catFood";
     else if (type === "clickPower") currencyKey = "catTreat";
     else if (type === "multiplier") currencyKey = "catCan";
-    else return;
+    else return false;
 
-    if (eco[currencyKey] < up.cost) return;
+    if (eco[currencyKey] < up.cost) return false;
     eco[currencyKey] -= up.cost;
     eco[levelKey]++;
 
@@ -1381,7 +1516,7 @@
     };
     setTimeout(() => { if (state === "sit") say(pick(followUps[type] || ["喵~"])); }, 3000);
     saveEconomy();
-    renderShop();
+    return true;
   }
 
   // ── UI: Float Text ──
@@ -1391,6 +1526,21 @@
     f.style.cssText = "position:absolute;left:20px;top:10px;font-size:14px;font-weight:700;color:#ffd700;pointer-events:none;animation:floatUp .8s ease-out forwards;text-shadow:0 1px 3px rgba(0,0,0,.3);";
     floatWrap.appendChild(f);
     setTimeout(() => f.remove(), 800);
+  }
+
+  // ── UI: Estate Display ──
+  function updateEstateDisplay() {
+    estateWrap.innerHTML = "";
+    const owned = eco.ownedEstate || [];
+    if (owned.length === 0) return;
+    for (const id of owned) {
+      const cfg = ESTATE_ICONS[id];
+      if (!cfg) continue;
+      const icon = document.createElement("span");
+      icon.textContent = cfg.emoji;
+      icon.style.cssText = `position:absolute;left:${32 + cfg.x}px;top:${32 + cfg.y}px;font-size:${cfg.size}px;opacity:.85;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));animation:estateFloat ${2 + Math.random()}s ease-in-out infinite;`;
+      estateWrap.appendChild(icon);
+    }
   }
 
   // ── Drawing: Cat Sprite ──
@@ -2017,7 +2167,7 @@
       currencyUpdateTimer = 0;
       updateCurrencyDisplay();
       checkAchievements();
-      if (shopOpen) renderShop();
+      if (shopOpen) updateShopData();
     }
 
     // Auto-save every 30s
