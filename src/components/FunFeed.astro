@@ -20,6 +20,12 @@ interface Props {
 }
 
 const { items } = Astro.props;
+
+function extractText(body: any): string {
+  if (!body) return '';
+  const raw = typeof body === 'string' ? body : String(body);
+  return raw.replace(/<[^>]*>/g, '').trim();
+}
 ---
 
 <div class="flex flex-col gap-6">
@@ -32,8 +38,7 @@ const { items } = Astro.props;
       tags={item.data.tags}
       image={item.data.image}
       imageAlt={item.data.imageAlt}
-      description={item.data.description}
-      body={item.body}
+      description={item.data.description || extractText(item.body)}
     />
   ))}
 </div>
