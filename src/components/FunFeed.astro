@@ -21,15 +21,34 @@ interface Props {
 
 const { items } = Astro.props;
 
+const interleaved = interleaveByType(items);
+
 function extractText(body: any): string {
   if (!body) return '';
   const raw = typeof body === 'string' ? body : String(body);
   return raw.replace(/<[^>]*>/g, '').trim();
 }
+
+// 图片类与文字类(语录/笑话)交叉排列，避免连续同类型
+function interleaveByType(items: FunItem[]): FunItem[] {
+  const images: FunItem[] = [];
+  const texts: FunItem[] = [];
+  for (const item of items) {
+    if (item.data.image) images.push(item);
+    else texts.push(item);
+  }
+  const result: FunItem[] = [];
+  const max = Math.max(images.length, texts.length);
+  for (let i = 0; i < max; i++) {
+    if (i < images.length) result.push(images[i]);
+    if (i < texts.length) result.push(texts[i]);
+  }
+  return result;
+}
 ---
 
 <div class="flex flex-col gap-6">
-  {items.map((item) => (
+  {interleaved.map((item) => (
     <FunCard
       itemId={item.id}
       title={item.data.title}
