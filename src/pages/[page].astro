@@ -3,11 +3,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import FunFeed from '../components/FunFeed.astro';
 import Pagination from '../components/Pagination.astro';
 import { getCollection } from 'astro:content';
+import { interleaveByDate } from '../utils/interleave';
 
 export async function getStaticPaths({ paginate }) {
   const allFun = await getCollection('fun');
   const sortedFun = allFun.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
-  return paginate(sortedFun, { pageSize: 6 });
+  return paginate(interleaveByDate(sortedFun), { pageSize: 6 });
 }
 
 const { page } = Astro.props;
