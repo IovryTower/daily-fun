@@ -112,6 +112,7 @@ export async function github(path, env, options = {}) {
     method: options.method || 'GET',
     headers: {
       Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      'User-Agent': 'daily-fun-cms/1.0',
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
