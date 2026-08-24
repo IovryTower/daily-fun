@@ -123,8 +123,9 @@ export async function github(path, env, options = {}) {
   let parsed = null;
   try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
   if (!res.ok) {
-    const msg = parsed && parsed.message ? parsed.message : `GitHub ${res.status}`;
-    throw new Error(msg);
+    const ghMsg = parsed && typeof parsed === 'object' && parsed.message ? `: ${parsed.message}` : '';
+    const ghDoc = parsed && typeof parsed === 'object' && parsed.documentation_url ? ` (${parsed.documentation_url})` : '';
+    throw new Error(`GitHub ${res.status}${ghMsg}${ghDoc} @ ${path}`);
   }
   return parsed;
 }
