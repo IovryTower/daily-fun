@@ -1,0 +1,387 @@
+---
+import '../styles/global.css';
+
+const CATEGORIES = [
+  { id: 'meme', label: '梗图' },
+  { id: 'joke', label: '笑话' },
+  { id: 'quote', label: '趣句' },
+  { id: 'gif', label: '动图' },
+  { id: 'image', label: '趣图' },
+  { id: 'other', label: '其他' },
+];
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Fun · 内容管理</title>
+    <meta name="robots" content="noindex" />
+    <script is:inline>
+      (function () {
+        const theme = localStorage.getItem('theme');
+        if (theme === 'dark' || (!theme && matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-background text-text-primary">
+    <div id="cat-data" hidden>{JSON.stringify(CATEGORIES)}</div>
+    <main class="mx-auto max-w-3xl px-4 py-8">
+      <header class="mb-6 flex items-center justify-between">
+        <h1 class="text-xl font-bold">🐱 内容管理</h1>
+        <button id="logoutBtn" class="hidden rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg">退出登录</button>
+      </header>
+
+      <div id="notice" class="mb-4 hidden rounded-lg border border-accent/30 bg-badge-bg px-4 py-3 text-sm text-text-secondary">
+        提示：仅 <b>daily-fun.pages.dev</b> 主站提供管理接口。提交写入仓库后自动触发 CI，1-2 分钟线上生效。
+      </div>
+
+      <!-- 登录视图 -->
+      <section id="loginView" class="mx-auto max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <h2 class="mb-4 text-center text-lg font-semibold">管理员登录</h2>
+        <form id="loginForm" class="flex flex-col gap-3">
+          <input id="password" type="password" required placeholder="访问密码"
+            class="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+          <button type="submit" class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover">登录</button>
+          <p id="loginError" class="hidden text-center text-sm text-red-500"></p>
+        </form>
+      </section>
+
+      <!-- 管理视图 -->
+      <section id="adminView" class="hidden">
+        <div class="mb-6 flex flex-wrap items-center gap-2">
+          <button id="newBtn" class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover">＋ 新建内容</button>
+          <button id="refreshBtn" class="rounded-lg border border-border px-4 py-2 text-sm hover:bg-badge-bg">刷新列表</button>
+          <span id="listCount" class="text-xs text-text-secondary"></span>
+        </div>
+
+        <!-- 列表 / 编辑容器 -->
+        <div id="listView"></div>
+        <div id="editorView" class="hidden"></div>
+      </section>
+    </main>
+
+    <script is:inline>
+      (function () {
+        const CAT = JSON.parse(document.getElementById('cat-data').textContent);
+        const MIME_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
+        let token = localStorage.getItem('dailyFunAdminToken') || '';
+
+        const loginView = document.getElementById('loginView');
+        const adminView = document.getElementById('adminView');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const notice = document.getElementById('notice');
+
+        function api(path, options = {}) {
+          const headers = options.body ? { 'Content-Type': 'application/json' } : {};
+          const auth = token ? { Authorization: 'Bearer ' + token } : {};
+          let p = ['/api', path].join('');
+          if (options.query) p += '?' + new URLSearchParams(options.query).toString();
+          return fetch(p, { ...options, headers: { ...headers, ...auth }, body: options.body ? JSON.stringify(options.body) : undefined }).then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
+            return data;
+          });
+        }
+
+        function loginViewMode(on) { loginView.classList.toggle('hidden', !on); }
+
+        function showAdmin() {
+          loginView.classList.add('hidden');
+          adminView.classList.remove('hidden');
+          logoutBtn.classList.remove('hidden');
+          notice.classList.remove('hidden');
+          loadList();
+        }
+
+        function showLogin() {
+          adminView.classList.add('hidden');
+          logoutBtn.classList.add('hidden');
+          notice.classList.add('hidden');
+          loginView.classList.remove('hidden');
+        }
+
+        // ── Login ──
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const err = document.getElementById('loginError');
+          err.classList.add('hidden');
+          try {
+            const data = await api('/login', { method: 'POST', body: { password: document.getElementById('password').value } });
+            token = data.token;
+            localStorage.setItem('dailyFunAdminToken', token);
+            showAdmin();
+          } catch (err2) {
+            err.textContent = err2.message;
+            err.classList.remove('hidden');
+          }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+          token = '';
+          localStorage.removeItem('dailyFunAdminToken');
+          showLogin();
+        });
+
+        // ── List ──
+        const listView = document.getElementById('listView');
+        const listCount = document.getElementById('listCount');
+
+        function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+        function catLabel(id) { const c = CAT.find((x) => x.id === id); return c ? c.label : id; }
+
+        async function loadList() {
+          listView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary">加载中...</div>';
+          try {
+            const { items } = await api('/list');
+            listCount.textContent = `${items.length} 条内容`;
+            if (!items.length) {
+              listView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary">暂无内容，点击「新建内容」开始</div>';
+              return;
+            }
+            listView.innerHTML = `<div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+              <ul class="divide-y divide-border">
+                ${items.map((it) => `<li class="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-badge-bg">
+                  <span class="flex-1 truncate">${esc(it.name)}</span>
+                  <button data-path="${esc(it.path)}" data-name="${esc(it.name)}" class="editBtn rounded border border-border px-2 py-1 text-xs hover:bg-accent hover:text-white">编辑</button>
+                  <button data-path="${esc(it.path)}" data-name="${esc(it.name)}" class="delBtn rounded border border-red-300 px-2 py-1 text-xs text-red-500 hover:bg-red-500 hover:text-white">删除</button>
+                </li>`).join('')}
+              </ul></div>`;
+
+            listView.querySelectorAll('.editBtn').forEach((b) => b.addEventListener('click', () => loadEditor(b.dataset.path)));
+            listView.querySelectorAll('.delBtn').forEach((b) => b.addEventListener('click', () => removeContent(b.dataset.path, b.dataset.name)));
+          } catch (err) {
+            listView.innerHTML = `<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600">${esc(err.message)}</div>`;
+          }
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', loadList);
+        document.getElementById('newBtn').addEventListener('click', () => loadEditor());
+
+        // ── Delete ──
+        async function removeContent(path, name) {
+          if (!confirm(`确定删除「${name}」？\n内容将被提交移除并触发 CI。`)) return;
+          try {
+            await api('/delete', { method: 'POST', body: { path } });
+            alert('✅ 已提交删除，CI 部署中');
+            loadList();
+          } catch (err) { alert('❌ ' + err.message); }
+        }
+
+        // ── Editor ──
+        const editorView = document.getElementById('editorView');
+        let editingPath = null;
+
+        function slugify(title) {
+          let s = String(title || '').trim().toLowerCase();
+          s = s.replace(/[\s。，、！!？?：:；;"'，.]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+          return s || '';
+        }
+
+        function loadEditor(existingPath) {
+          editingPath = existingPath || null;
+          editorView.classList.remove('hidden');
+          listView.classList.add('hidden');
+          document.getElementById('newBtn').classList.add('hidden');
+
+          if (existingPath) {
+            editorView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary">加载中...</div>';
+            api('/get?path=' + encodeURIComponent(existingPath)).then(({ data, body, path }) => {
+              fillEditor(data, body, path);
+            }).catch((err) => {
+              editorView.innerHTML = `<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600">${esc(err.message)}</div>
+                <button class="mt-3 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg" onclick="history.back()">返回</button>`;
+            });
+          } else {
+            const today = new Date().toISOString().slice(0, 10);
+            fillEditor({ date: today, category: 'meme', tags: [] }, '');
+          }
+        }
+
+        function cancelEdit() {
+          editorView.classList.add('hidden');
+          listView.classList.remove('hidden');
+          document.getElementById('newBtn').classList.remove('hidden');
+        }
+
+        function fillEditor(data, body) {
+          editorView.innerHTML = `
+            <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+              <div class="mb-4 flex items-center justify-between">
+                <h2 class="text-lg font-semibold">${editingPath ? '✏️ 编辑内容' : '➕ 新建内容'}</h2>
+                <button id="cancelBtn" class="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg">取消</button>
+              </div>
+
+              <form id="contentForm" class="flex flex-col gap-3">
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">标题 *</label>
+                  <input name="title" required value="${esc(data.title || '')}" maxlength="80"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">日期 *</label>
+                    <input name="date" type="date" required value="${esc(data.date || '')}"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">分类 *</label>
+                    <select name="category"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
+                      ${CAT.map((c) => `<option value="${c.id}" ${data.category === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">slug（文件名 ${editingPath ? '· 不可改' : '· 可自动生成'}）</label>
+                  <input name="slug" value="${esc(data.slug || '')}" ${editingPath ? 'disabled' : ''} placeholder="如 meme-1 或 周一快乐"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50" />
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">标签（逗号分隔）</label>
+                  <input name="tags" value="${esc((data.tags || []).join(', '))}" placeholder="搞笑, 猫, 上班"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">图片（仅新建梗图/动图/趣图）</label>
+                  <input name="image" type="file" accept=".png,.jpg,.jpeg,.gif,.webp"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1 file:text-xs file:text-white" />
+                  ${data.image ? `<div class="mt-2 text-xs text-text-secondary">当前图片：${esc(data.image)}（替换将覆盖同名文件）</div>` : ''}
+                  <img id="imgPreview" class="mt-3 hidden max-h-48 rounded-lg border border-border object-contain" />
+                  <div class="mt-1 hidden text-xs text-red-500" id="imgWarn"></div>
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">图片描述（alt）</label>
+                  <input name="imageAlt" value="${esc(data.imageAlt || '')}"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">描述（列表卡片显示）</label>
+                  <textarea name="description" rows="2" maxlength="300"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">${esc(data.description || '')}</textarea>
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">来源（可选）</label>
+                  <input name="source" value="${esc(data.source || '')}"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                </div>
+
+                <div>
+                  <label class="mb-1 block text-xs font-medium text-text-secondary">正文（趣句/笑话，Markdown）</label>
+                  <textarea name="body" rows="5"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">${esc(body || '')}</textarea>
+                </div>
+
+                <div class="flex items-center gap-3">
+                  <button type="submit" class="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-hover">${editingPath ? '保存修改' : '发布内容'}</button>
+                  <span id="publishMsg" class="text-sm text-text-secondary"></span>
+                </div>
+              </form>
+            </div>`;
+
+          document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
+
+          // Auto-slug on title change (only for new / empty slug)
+          const titleInput = document.querySelector('#contentForm [name="title"]');
+          const slugInput = document.querySelector('#contentForm [name="slug"]');
+          titleInput.addEventListener('input', () => {
+            if (!slugInput.disabled && !slugInput.value) {
+              slugInput.value = slugify(titleInput.value);
+            }
+          });
+
+          // Image preview
+          const imgInput = document.querySelector('#contentForm [name="image"]');
+          const imgPreview = document.getElementById('imgPreview');
+          const imgWarn = document.getElementById('imgWarn');
+          imgInput.addEventListener('change', () => {
+            const f = imgInput.files[0];
+            imgWarn.classList.add('hidden');
+            if (!f) { imgPreview.classList.add('hidden'); return; }
+            if (!MIME_EXT[f.type]) {
+              imgWarn.textContent = '不支持的图片格式（仅 png/jpg/gif/webp）';
+              imgWarn.classList.remove('hidden');
+              imgInput.value = '';
+              imgPreview.classList.add('hidden');
+              return;
+            }
+            if (f.size > 5 * 1024 * 1024) {
+              imgWarn.textContent = '图片超过 5MB 限制';
+              imgWarn.classList.remove('hidden');
+              imgInput.value = '';
+              imgPreview.classList.add('hidden');
+              return;
+            }
+            imgPreview.src = URL.createObjectURL(f);
+            imgPreview.classList.remove('hidden');
+          });
+
+          document.getElementById('contentForm').addEventListener('submit', submitForm);
+        }
+
+        async function submitForm(e) {
+          e.preventDefault();
+          const pubMsg = document.getElementById('publishMsg');
+          pubMsg.textContent = '提交中...';
+          const submitBtn = e.target.querySelector('button[type="submit"]');
+          submitBtn.disabled = true;
+
+          const form = new FormData(e.target);
+          const payload = {
+            title: form.get('title'),
+            date: form.get('date'),
+            category: form.get('category'),
+            slug: editingPath ? null : form.get('slug'),
+            tags: String(form.get('tags') || '').split(',').map((s) => s.trim()).filter(Boolean),
+            description: form.get('description'),
+            source: form.get('source'),
+            imageAlt: form.get('imageAlt'),
+            body: form.get('body'),
+            existingPath: editingPath,
+          };
+
+          const imgFile = form.get('image');
+          if (imgFile && imgFile.size) {
+            const ext = MIME_EXT[imgFile.type];
+            const base64 = await new Promise((res) => {
+              const r = new FileReader();
+              r.onload = () => { const m = /base64,(.*)$/.exec(r.result); res(m ? m[1] : ''); };
+              r.readAsDataURL(imgFile);
+            });
+            payload.image = { base64, ext };
+          }
+
+          try {
+            const res = await api('/publish', { method: 'POST', body: payload });
+            pubMsg.textContent = '';
+            alert('✅ ' + res.message);
+            cancelEdit();
+            loadList();
+          } catch (err) {
+            pubMsg.textContent = '';
+            submitBtn.disabled = false;
+            alert('❌ ' + err.message);
+          }
+        }
+
+        // ── Init ──
+        if (token) {
+          showAdmin();
+        } else {
+          showLogin();
+        }
+      })();
+    </script>
+  </body>
+</html>

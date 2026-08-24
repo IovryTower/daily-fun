@@ -1,0 +1,7 @@
+# 复制为 .dev.vars 并填入真实值（本地 wrangler pages dev 测试用）
+# 线上值在 Cloudflare Pages 项目设置中配置，请勿提交 .dev.vars
+ADMIN_PASSWORD=your-password
+ADMIN_SECRET=your-random-secret
+# GitHub 个人访问令牌（仓库 Contents 读写权限）
+GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+GITHUB_REPO=IovryTower/daily-fun
