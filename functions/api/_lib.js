@@ -125,7 +125,9 @@ export async function github(path, env, options = {}) {
   if (!res.ok) {
     const ghMsg = parsed && typeof parsed === 'object' && parsed.message ? `: ${parsed.message}` : '';
     const ghDoc = parsed && typeof parsed === 'object' && parsed.documentation_url ? ` (${parsed.documentation_url})` : '';
-    throw new Error(`GitHub ${res.status}${ghMsg}${ghDoc} @ ${path}`);
+    const tok = env && env.GITHUB_TOKEN ? `tok=****${String(env.GITHUB_TOKEN).slice(-4)}` : 'tok=none';
+    const rl = res.headers.get('x-ratelimit-remaining') ?? res.headers.get('ratelimit-remaining') ?? '';
+    throw new Error(`GitHub ${res.status}${ghMsg}${ghDoc} @ ${path} | ${tok} rl=${rl}`);
   }
   return parsed;
 }
