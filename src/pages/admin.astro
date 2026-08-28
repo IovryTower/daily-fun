@@ -9,6 +9,7 @@ const CATEGORIES = [
   { id: 'image', label: '趣图' },
   { id: 'other', label: '其他' },
 ];
+const CAT_ICONS = { meme: '😂', joke: '🤣', quote: '✨', gif: '🎬', image: '🖼️', other: '🎲' };
 ---
 
 <!doctype html>
@@ -29,14 +30,14 @@ const CATEGORIES = [
   </head>
   <body class="min-h-screen bg-background text-text-primary">
     <div id="cat-data" hidden>{JSON.stringify(CATEGORIES)}</div>
-    <main class="mx-auto max-w-3xl px-4 py-8">
+    <main class="mx-auto max-w-4xl px-4 py-8">
       <header class="mb-6 flex items-center justify-between">
         <h1 class="text-xl font-bold">🐱 内容管理</h1>
         <button id="logoutBtn" class="hidden rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg">退出登录</button>
       </header>
 
       <div id="notice" class="mb-4 hidden rounded-lg border border-accent/30 bg-badge-bg px-4 py-3 text-sm text-text-secondary">
-        提示：仅 <b>daily-fun.pages.dev</b> 主站提供管理接口。提交写入仓库后自动触发 CI，1-2 分钟线上生效。
+        提示：草稿保存在本浏览器（未发布不生效）；点击「发布」才写入仓库并触发 CI，1-2 分钟线上可见。仅 <b>daily-fun.pages.dev</b> 主站提供管理接口。
       </div>
 
       <!-- 登录视图 -->
@@ -55,11 +56,24 @@ const CATEGORIES = [
         <div class="mb-6 flex flex-wrap items-center gap-2">
           <button id="newBtn" class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover">＋ 新建内容</button>
           <button id="refreshBtn" class="rounded-lg border border-border px-4 py-2 text-sm hover:bg-badge-bg">刷新列表</button>
-          <span id="listCount" class="text-xs text-text-secondary"></span>
+          <button id="publishAllBtn" class="hidden rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover">🚀 全部发布</button>
+          <span id="counts" class="text-xs text-text-secondary"></span>
         </div>
 
-        <!-- 列表 / 编辑容器 -->
-        <div id="listView"></div>
+        <!-- 草稿区 -->
+        <div id="draftSection" class="mb-8 hidden">
+          <h2 class="mb-2 text-sm font-semibold text-text-secondary">✍️ 待发布草稿（仅本浏览器）</h2>
+          <p id="draftEmpty" class="mb-2 text-sm text-text-secondary">暂无草稿，编辑内容后点「保存草稿」即可累积多条。</p>
+          <div id="draftList" class="flex flex-col gap-2"></div>
+        </div>
+
+        <!-- 已发布区 -->
+        <div class="mb-8">
+          <h2 class="mb-2 text-sm font-semibold text-text-secondary">📚 已发布内容（GitHub）</h2>
+          <div id="listView"></div>
+        </div>
+
+        <!-- 编辑器 -->
         <div id="editorView" class="hidden"></div>
       </section>
     </main>
@@ -67,13 +81,18 @@ const CATEGORIES = [
     <script is:inline>
       (function () {
         const CAT = JSON.parse(document.getElementById('cat-data').textContent);
+        const CAT_ICONS = { meme: '😂', joke: '🤣', quote: '✨', gif: '🎬', image: '🖼️', other: '🎲' };
         const MIME_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
+        const DRAFT_KEY = 'dailyFunDrafts';
         let token = localStorage.getItem('dailyFunAdminToken') || '';
 
         const loginView = document.getElementById('loginView');
         const adminView = document.getElementById('adminView');
         const logoutBtn = document.getElementById('logoutBtn');
         const notice = document.getElementById('notice');
+        const draftSection = document.getElementById('draftSection');
+        const draftEmpty = document.getElementById('draftEmpty');
+        const draftList = document.getElementById('draftList');
 
         function api(path, options = {}) {
           const headers = options.body ? { 'Content-Type': 'application/json' } : {};
@@ -87,16 +106,29 @@ const CATEGORIES = [
           });
         }
 
-        function loginViewMode(on) { loginView.classList.toggle('hidden', !on); }
+        // ───────── 草稿 (localStorage) ─────────
+        function loadDrafts() {
+          try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '[]'); } catch { return []; }
+        }
+        function saveDrafts(list) {
+          try { localStorage.setItem(DRAFT_KEY, JSON.stringify(list)); } catch { alert('⚠️ 草稿保存失败：浏览器本地存储已满，建议删掉部分草稿或减少大图'); return false; }
+          return true;
+        }
+        function newUid() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
+        function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function catLabel(id) { const c = CAT.find((x) => x.id === id); return c ? c.label : id; }
+        function catIcon(id) { return CAT_ICONS[id] || '📁'; }
+
+        // ───────── 登录 / 视图切换 ─────────
         function showAdmin() {
           loginView.classList.add('hidden');
           adminView.classList.remove('hidden');
           logoutBtn.classList.remove('hidden');
           notice.classList.remove('hidden');
+          renderDraftSection();
           loadList();
         }
-
         function showLogin() {
           adminView.classList.add('hidden');
           logoutBtn.classList.add('hidden');
@@ -104,7 +136,6 @@ const CATEGORIES = [
           loginView.classList.remove('hidden');
         }
 
-        // ── Login ──
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
           e.preventDefault();
           const err = document.getElementById('loginError');
@@ -126,55 +157,96 @@ const CATEGORIES = [
           showLogin();
         });
 
-        // ── List ──
+        // ───────── 草稿区渲染 ─────────
+        const publishAllBtn = document.getElementById('publishAllBtn');
+        const counts = document.getElementById('counts');
+
+        function renderDraftSection() {
+          const drafts = loadDrafts();
+          draftSection.classList.toggle('hidden', drafts.length === 0);
+          publishAllBtn.classList.toggle('hidden', drafts.length === 0);
+          publishAllBtn.textContent = `🚀 全部发布 (${drafts.length})`;
+          draftEmpty.classList.toggle('hidden', drafts.length > 0);
+
+          if (!drafts.length) { draftList.innerHTML = ''; updateCounts(drafts.length); return; }
+          draftList.innerHTML = drafts.map((d) => `
+            <div class="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm">
+              <span class="flex-1 truncate font-medium">${d.title ? esc(d.title) : '<span class="text-text-secondary">未命名</span>'}</span>
+              <span class="text-xs text-text-secondary">${catIcon(d.category)} ${catLabel(d.category)}</span>
+              ${d.existingPath ? '<span class="text-xs text-text-secondary">(更新)</span>' : ''}
+              <button data-action="edit" data-uid="${esc(d.uid)}" class="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-accent hover:text-white">编辑</button>
+              <button data-action="publish" data-uid="${esc(d.uid)}" class="rounded bg-accent px-2 py-0.5 text-xs font-semibold text-white hover:bg-accent-hover">发布</button>
+              <button data-action="del" data-uid="${esc(d.uid)}" class="rounded border border-red-300 bg-white px-2 py-0.5 text-xs text-red-500 hover:bg-red-500 hover:text-white">删除</button>
+            </div>`).join('');
+
+          draftList.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+            const uid = b.dataset.uid;
+            if (b.dataset.action === 'edit') openDraftEditor(uid);
+            else if (b.dataset.action === 'publish') publishDraft(uid);
+            else if (b.dataset.action === 'del') {
+              if (!confirm('删除这条草稿？')) return;
+              saveDrafts(loadDrafts().filter((x) => x.uid !== uid));
+              renderDraftSection();
+            }
+          }));
+          updateCounts(drafts.length);
+        }
+
+        function updateCounts(draftCount) {
+          const n = document.querySelectorAll('#listView ul li, #listView .noItems').length;
+          counts.textContent = `${draftCount || 0} 条草稿 · 已发布 ${listCountNum()}`;
+        }
+        let publishedCount = 0;
+        function listCountNum() { return publishedCount; }
+
+        // ───────── 已发布列表 ─────────
         const listView = document.getElementById('listView');
-        const listCount = document.getElementById('listCount');
-
-        function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-
-        function catLabel(id) { const c = CAT.find((x) => x.id === id); return c ? c.label : id; }
 
         async function loadList() {
           listView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary">加载中...</div>';
           try {
             const { items } = await api('/list');
-            listCount.textContent = `${items.length} 条内容`;
+            publishedCount = items.length;
+            updateCounts(loadDrafts().length);
             if (!items.length) {
-              listView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary">暂无内容，点击「新建内容」开始</div>';
+              listView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary noItems">暂无内容，点击「新建内容」开始</div>';
               return;
             }
             listView.innerHTML = `<div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
               <ul class="divide-y divide-border">
                 ${items.map((it) => `<li class="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-badge-bg">
                   <span class="flex-1 truncate">${esc(it.name)}</span>
-                  <button data-path="${esc(it.path)}" data-name="${esc(it.name)}" class="editBtn rounded border border-border px-2 py-1 text-xs hover:bg-accent hover:text-white">编辑</button>
-                  <button data-path="${esc(it.path)}" data-name="${esc(it.name)}" class="delBtn rounded border border-red-300 px-2 py-1 text-xs text-red-500 hover:bg-red-500 hover:text-white">删除</button>
+                  <button data-path="${esc(it.path)}" class="editPubBtn rounded border border-border px-2 py-1 text-xs hover:bg-accent hover:text-white">编辑</button>
+                  <button data-path="${esc(it.path)}" data-name="${esc(it.name)}" class="delPubBtn rounded border border-red-300 px-2 py-1 text-xs text-red-500 hover:bg-red-500 hover:text-white">删除</button>
                 </li>`).join('')}
               </ul></div>`;
 
-            listView.querySelectorAll('.editBtn').forEach((b) => b.addEventListener('click', () => loadEditor(b.dataset.path)));
-            listView.querySelectorAll('.delBtn').forEach((b) => b.addEventListener('click', () => removeContent(b.dataset.path, b.dataset.name)));
+            listView.querySelectorAll('.editPubBtn').forEach((b) => b.addEventListener('click', () => loadEditor(b.dataset.path)));
+            listView.querySelectorAll('.delPubBtn').forEach((b) => b.addEventListener('click', () => removeContent(b.dataset.path, b.dataset.name)));
           } catch (err) {
             listView.innerHTML = `<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600">${esc(err.message)}</div>`;
           }
         }
 
-        document.getElementById('refreshBtn').addEventListener('click', loadList);
-        document.getElementById('newBtn').addEventListener('click', () => loadEditor());
+        document.getElementById('refreshBtn').addEventListener('click', () => { loadList(); });
+        document.getElementById('newBtn').addEventListener('click', () => openNewEditor());
 
-        // ── Delete ──
+        // ───────── 删除已发布 ─────────
         async function removeContent(path, name) {
           if (!confirm(`确定删除「${name}」？\n内容将被提交移除并触发 CI。`)) return;
           try {
             await api('/delete', { method: 'POST', body: { path } });
             alert('✅ 已提交删除，CI 部署中');
+            renderDraftSection();
             loadList();
           } catch (err) { alert('❌ ' + err.message); }
         }
 
-        // ── Editor ──
+        // ───────── 编辑器 ─────────
         const editorView = document.getElementById('editorView');
-        let editingPath = null;
+        let editingPath = null;        // 编辑已发布内容时的原路径
+        let editingDraftUid = null;    // 编辑草稿时的 uid
+        let currentImage = null;       // {kind:'new',ext,base64,name} | {kind:'existing',path} | null
 
         function slugify(title) {
           let s = String(title || '').trim().toLowerCase();
@@ -182,205 +254,363 @@ const CATEGORIES = [
           return s || '';
         }
 
+        function openNewEditor() {
+          const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+          editingPath = null;
+          editingDraftUid = null;
+          currentImage = null;
+          fillEditor({ date: today, category: 'meme', tags: [] }, '', null);
+        }
+
+        function openDraftEditor(uid) {
+          const d = loadDrafts().find((x) => x.uid === uid);
+          if (!d) return;
+          editingPath = d.existingPath || null;
+          editingDraftUid = uid;
+          currentImage = d.image || null;
+          const data = { title: d.title, date: d.date, category: d.category, tags: d.tags || [], slug: d.slug, description: d.description, source: d.source, imageAlt: d.imageAlt };
+          fillEditor(data, d.body || '', editingPath);
+        }
+
         function loadEditor(existingPath) {
-          editingPath = existingPath || null;
+          editingDraftUid = null;
+          editingPath = existingPath;
           editorView.classList.remove('hidden');
           listView.classList.add('hidden');
           document.getElementById('newBtn').classList.add('hidden');
+          draftSection.classList.add('hidden');
 
-          if (existingPath) {
-            editorView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary">加载中...</div>';
-            api('/get?path=' + encodeURIComponent(existingPath)).then(({ data, body, path }) => {
-              fillEditor(data, body, path);
-            }).catch((err) => {
-              editorView.innerHTML = `<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600">${esc(err.message)}</div>
-                <button class="mt-3 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg" onclick="history.back()">返回</button>`;
-            });
-          } else {
-            const today = new Date().toISOString().slice(0, 10);
-            fillEditor({ date: today, category: 'meme', tags: [] }, '');
-          }
+          editorView.innerHTML = '<div class="py-8 text-center text-sm text-text-secondary">加载中...</div>';
+          api('/get?path=' + encodeURIComponent(existingPath)).then(({ data, body }) => {
+            currentImage = data.image ? { kind: 'existing', path: data.image } : null;
+            fillEditor(data, body, existingPath);
+          }).catch((err) => {
+            editorView.innerHTML = `<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600">${esc(err.message)}</div>
+              <button class="mt-3 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg" onclick="history.back()">返回</button>`;
+          });
         }
 
         function cancelEdit() {
           editorView.classList.add('hidden');
           listView.classList.remove('hidden');
           document.getElementById('newBtn').classList.remove('hidden');
+          renderDraftSection();
         }
 
-        function fillEditor(data, body) {
+        function fillEditor(data, body, existingPath) {
           editorView.innerHTML = `
             <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <div class="mb-4 flex items-center justify-between">
-                <h2 class="text-lg font-semibold">${editingPath ? '✏️ 编辑内容' : '➕ 新建内容'}</h2>
-                <button id="cancelBtn" class="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg">取消</button>
+                <h2 class="text-lg font-semibold">${editingDraftUid ? '✏️ 编辑草稿' : existingPath ? '✏️ 编辑已发布内容' : '➕ 新建内容'}</h2>
+                <button id="cancelBtn" class="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-badge-bg">关闭</button>
               </div>
 
-              <form id="contentForm" class="flex flex-col gap-3">
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">标题 *</label>
-                  <input name="title" required value="${esc(data.title || '')}" maxlength="80"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
+              <div class="grid gap-5 lg:grid-cols-2">
+                <!-- 表单 -->
+                <form id="contentForm" class="flex flex-col gap-3">
                   <div>
-                    <label class="mb-1 block text-xs font-medium text-text-secondary">日期 *</label>
-                    <input name="date" type="date" required value="${esc(data.date || '')}"
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">标题 *</label>
+                    <input name="title" required value="${esc(data.title || '')}" maxlength="80"
                       class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
                   </div>
-                  <div>
-                    <label class="mb-1 block text-xs font-medium text-text-secondary">分类 *</label>
-                    <select name="category"
-                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
-                      ${CAT.map((c) => `<option value="${c.id}" ${data.category === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}
-                    </select>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-text-secondary">日期 *</label>
+                      <input name="date" type="date" required value="${esc(data.date || '')}"
+                        class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-medium text-text-secondary">分类 *</label>
+                      <select name="category"
+                        class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">
+                        ${CAT.map((c) => `<option value="${c.id}" ${data.category === c.id ? 'selected' : ''}>${catIcon(c.id)} ${c.label}</option>`).join('')}
+                      </select>
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">slug（文件名 ${editingPath ? '· 不可改' : '· 可自动生成'}）</label>
-                  <input name="slug" value="${esc(data.slug || '')}" ${editingPath ? 'disabled' : ''} placeholder="如 meme-1 或 周一快乐"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50" />
-                </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">slug（文件名 ${existingPath ? '· 不可改' : '· 留空自动生成'}）</label>
+                    <input name="slug" value="${esc(data.slug || '')}" ${existingPath ? 'disabled' : ''} placeholder="如 meme-1 或 周一快乐"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50" />
+                  </div>
 
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">标签（逗号分隔）</label>
-                  <input name="tags" value="${esc((data.tags || []).join(', '))}" placeholder="搞笑, 猫, 上班"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
-                </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">标签（逗号分隔）</label>
+                    <input name="tags" value="${esc((data.tags || []).join(', '))}" placeholder="搞笑, 猫, 上班"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                  </div>
 
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">图片（仅新建梗图/动图/趣图）</label>
-                  <input name="image" type="file" accept=".png,.jpg,.jpeg,.gif,.webp"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1 file:text-xs file:text-white" />
-                  ${data.image ? `<div class="mt-2 text-xs text-text-secondary">当前图片：${esc(data.image)}（替换将覆盖同名文件）</div>` : ''}
-                  <img id="imgPreview" class="mt-3 hidden max-h-48 rounded-lg border border-border object-contain" />
-                  <div class="mt-1 hidden text-xs text-red-500" id="imgWarn"></div>
-                </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">图片（梗图/动图/趣图）</label>
+                    <input name="image" type="file" accept=".png,.jpg,.jpeg,.gif,.webp"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1 file:text-xs file:text-white" />
+                    <div id="imgMeta" class="mt-1 text-xs text-text-secondary"></div>
+                    <div class="mt-1 hidden text-xs text-red-500" id="imgWarn"></div>
+                  </div>
 
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">图片描述（alt）</label>
-                  <input name="imageAlt" value="${esc(data.imageAlt || '')}"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
-                </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">图片描述（alt）</label>
+                    <input name="imageAlt" value="${esc(data.imageAlt || '')}"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                  </div>
 
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">描述（列表卡片显示）</label>
-                  <textarea name="description" rows="2" maxlength="300"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">${esc(data.description || '')}</textarea>
-                </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">描述（列表卡片显示）</label>
+                    <textarea name="description" rows="2" maxlength="300"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">${esc(data.description || '')}</textarea>
+                  </div>
 
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">来源（可选）</label>
-                  <input name="source" value="${esc(data.source || '')}"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
-                </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">来源（可选）</label>
+                    <input name="source" value="${esc(data.source || '')}"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent" />
+                  </div>
 
-                <div>
-                  <label class="mb-1 block text-xs font-medium text-text-secondary">正文（趣句/笑话，Markdown）</label>
-                  <textarea name="body" rows="5"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">${esc(body || '')}</textarea>
-                </div>
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-text-secondary">正文（趣句/笑话，Markdown）</label>
+                    <textarea name="body" rows="4"
+                      class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent">${esc(body || '')}</textarea>
+                  </div>
 
-                <div class="flex items-center gap-3">
-                  <button type="submit" class="rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-hover">${editingPath ? '保存修改' : '发布内容'}</button>
-                  <span id="publishMsg" class="text-sm text-text-secondary"></span>
-                </div>
-              </form>
+                  <p class="text-xs text-text-secondary">💡 草稿只保存在本浏览器，发布才真正写入 GithHub。</p>
+                  <div class="flex flex-wrap items-center gap-3">
+                    <button id="saveDraftBtn" type="button"
+                      class="rounded-lg border border-amber-500/60 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600 hover:bg-amber-100">💾 保存草稿</button>
+                    <button type="submit"
+                      class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover">${existingPath ? '更新发布' : '发布内容'}</button>
+                    <span id="pubMsg" class="text-sm text-text-secondary"></span>
+                  </div>
+                </form>
+
+                <!-- 实时预览 -->
+                <aside class="lg:sticky lg:top-4">
+                  <h3 class="mb-2 text-xs font-semibold text-text-secondary">👀 实时预览</h3>
+                  <div id="previewCard"></div>
+                </aside>
+              </div>
             </div>`;
 
           document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
 
-          // Auto-slug on title change (only for new / empty slug)
+          // Auto-slug
           const titleInput = document.querySelector('#contentForm [name="title"]');
           const slugInput = document.querySelector('#contentForm [name="slug"]');
           titleInput.addEventListener('input', () => {
-            if (!slugInput.disabled && !slugInput.value) {
-              slugInput.value = slugify(titleInput.value);
-            }
+            if (!slugInput.disabled && !slugInput.value) slugInput.value = slugify(titleInput.value);
+            updatePreview();
+          });
+          document.querySelectorAll('#contentForm input[name], #contentForm select[name], #contentForm textarea[name]').forEach((el) => {
+            el.addEventListener('input', updatePreview);
+            el.addEventListener('change', updatePreview);
           });
 
-          // Image preview
+          // 图片选择
           const imgInput = document.querySelector('#contentForm [name="image"]');
-          const imgPreview = document.getElementById('imgPreview');
+          document.querySelectorAll('.imgNew').forEach((x) => x.remove());
+          const imgMeta = document.getElementById('imgMeta');
           const imgWarn = document.getElementById('imgWarn');
+          currentImage = refreshEditingImage(data); // 手机上图片字段状态
           imgInput.addEventListener('change', () => {
             const f = imgInput.files[0];
             imgWarn.classList.add('hidden');
-            if (!f) { imgPreview.classList.add('hidden'); return; }
-            if (!MIME_EXT[f.type]) {
-              imgWarn.textContent = '不支持的图片格式（仅 png/jpg/gif/webp）';
-              imgWarn.classList.remove('hidden');
-              imgInput.value = '';
-              imgPreview.classList.add('hidden');
-              return;
-            }
-            if (f.size > 5 * 1024 * 1024) {
-              imgWarn.textContent = '图片超过 5MB 限制';
-              imgWarn.classList.remove('hidden');
-              imgInput.value = '';
-              imgPreview.classList.add('hidden');
-              return;
-            }
-            imgPreview.src = URL.createObjectURL(f);
-            imgPreview.classList.remove('hidden');
+            if (!f) { updatePreview(); renderImgMeta(); return; }
+            if (!MIME_EXT[f.type]) { imgWarn.textContent = '不支持的图片格式（仅 png/jpg/gif/webp）'; imgWarn.classList.remove('hidden'); imgInput.value = ''; return; }
+            if (f.size > 5 * 1024 * 1024) { imgWarn.textContent = '图片超过 5MB 限制'; imgWarn.classList.remove('hidden'); imgInput.value = ''; return; }
+            const r = new FileReader();
+            r.onload = () => {
+              const m = /base64,(.*)$/.exec(r.result);
+              const b64 = m ? m[1] : '';
+              const sizeKB = Math.round(b64.length * 3 / 4 / 1024);
+              if (sizeKB > 2500) { imgWarn.textContent = `⚠️ 图片约 ${sizeKB}KB，草稿可能超出浏览器存储，建议换小图或在发布时直接选同一张图`; imgWarn.classList.remove('hidden'); }
+              currentImage = { kind: 'new', ext: MIME_EXT[f.type], base64: b64, name: f.name };
+              renderImgMeta();
+              updatePreview();
+            };
+            r.onerror = () => alert('图片读取失败');
+            r.readAsDataURL(f);
           });
 
+          renderImgMeta();
+          updatePreview();
+
+          document.getElementById('saveDraftBtn').addEventListener('click', saveAsDraft);
           document.getElementById('contentForm').addEventListener('submit', submitForm);
         }
 
+        // 现有图片显示（编辑已发布内容）
+        function refreshEditingImage(data) {
+          if (currentImage) return currentImage;
+          return data.image ? { kind: 'existing', path: data.image } : null;
+        }
+        function renderImgMeta() {
+          const el = document.getElementById('imgMeta');
+          if (!el) return;
+          if (currentImage && currentImage.kind === 'existing') el.textContent = `当前图片：${currentImage.path}（选择新图将覆盖该文件）`;
+          else if (currentImage && currentImage.kind === 'new') el.textContent = `已选新图：${currentImage.name}（保存草稿/发布时生效）`;
+          else el.textContent = '未选择图片';
+        }
+
+        // ───────── 实时预览 ─────────
+        function updatePreview() {
+          const box = document.getElementById('previewCard');
+          if (!box) return;
+          const f = () => {
+            const form = document.getElementById('contentForm');
+            if (!form) return {};
+            const fd = new FormData(form);
+            return {
+              title: fd.get('title') || '',
+              date: fd.get('date') || '',
+              category: fd.get('category') || 'meme',
+              tags: String(fd.get('tags') || '').split(',').map((s) => s.trim()).filter(Boolean),
+              description: fd.get('description') || '',
+              body: fd.get('body') || '',
+              imageAlt: fd.get('imageAlt') || '',
+            };
+          };
+          const v = f();
+          const icon = catIcon(v.category);
+          const imgSrc = currentImage && currentImage.kind === 'new'
+            ? `data:image/${currentImage.ext.slice(1)};base64,${currentImage.base64}`
+            : (currentImage && currentImage.kind === 'existing' ? currentImage.path : null);
+          const textOnly = !imgSrc && (v.category === 'joke' || v.category === 'quote');
+          const dispText = v.description || (textOnly ? v.body : '');
+
+          box.innerHTML = `<div class="rounded-xl border border-border bg-surface p-5 shadow-[0_1px_3px_var(--color-card-shadow)]">
+            <div class="mb-3 flex items-center justify-between">
+              <span class="inline-flex items-center gap-1 rounded-md bg-badge-bg px-2 py-0.5 text-xs font-medium text-accent">
+                <span>${icon}</span><span>${catLabel(v.category)}</span>
+              </span>
+              <time class="text-xs text-text-secondary">${v.date || '日期'}</time>
+            </div>
+            ${imgSrc ? `<div class="mb-3 overflow-hidden rounded-lg">
+                <img src="${esc(imgSrc)}" alt="${esc(v.imageAlt || v.title || '图片')}" class="w-full object-contain max-h-56" />
+              </div>` : ''}
+            ${textOnly && dispText ? `<blockquote class="mb-3 border-l-3 pl-4 leading-relaxed text-text-primary ${v.category === 'quote' ? 'border-accent text-xl italic' : 'border-accent text-lg'}">
+                ${v.category === 'quote' ? '<span class="mr-1 text-2xl text-accent opacity-40">❝</span>' : ''}${esc(dispText)}
+              </blockquote>` : ''}
+            ${!imgSrc ? `<h2 class="${textOnly ? 'mb-2' : 'mb-2'} text-lg font-bold text-text-primary">${esc(v.title || '（未填标题）')}</h2>` : ''}
+            ${imgSrc && !textOnly && v.description ? `<p class="mb-2 text-sm text-text-secondary">${esc(v.description)}</p>` : ''}
+            <div class="flex flex-wrap gap-1.5">
+              ${v.tags.map((t) => `<span class="text-xs text-text-secondary">#${esc(t)}</span>`).join('')}
+            </div>
+          </div>`;
+        }
+
+        // ───────── 保存草稿 ─────────
+        function collectForm() {
+          const fd = new FormData(document.getElementById('contentForm'));
+          let slug = String(fd.get('slug') || '').trim();
+          if (editingPath && !slug) {
+            const m = /^content\/fun\/\d{4}-\d{2}-\d{2}-(.*)\.md$/.exec(editingPath);
+            if (m) slug = m[1];
+          }
+          if (!editingPath && !slug) slug = slugify(fd.get('title'));
+          return {
+            title: String(fd.get('title') || '').trim(),
+            date: String(fd.get('date') || '').trim(),
+            category: String(fd.get('category') || 'meme').trim(),
+            slug,
+            tags: String(fd.get('tags') || '').split(',').map((s) => s.trim()).filter(Boolean),
+            description: String(fd.get('description') || '').trim(),
+            source: String(fd.get('source') || '').trim(),
+            imageAlt: String(fd.get('imageAlt') || '').trim(),
+            body: String(fd.get('body') || ''),
+            image: currentImage,
+            existingPath: editingPath || null,
+          };
+        }
+
+        function saveAsDraft() {
+          const title = String(document.querySelector('#contentForm [name="title"]').value || '').trim();
+          if (!title) { alert('请先填写标题'); return; }
+          if (!document.querySelector('#contentForm [name="date"]').value) { alert('请先选择日期'); return; }
+          const d = collectForm();
+          d.uid = editingDraftUid || newUid();
+          const list = loadDrafts();
+          const i = list.findIndex((x) => x.uid === d.uid);
+          if (i >= 0) list[i] = d; else list.unshift(d);
+          if (saveDrafts(list)) {
+            alert('💾 已保存草稿' + (d.existingPath ? '（更新已有内容，发布时才生效）' : ''));
+            cancelEdit();
+          }
+        }
+
+        // ───────── 发布 ─────────
         async function submitForm(e) {
           e.preventDefault();
-          const pubMsg = document.getElementById('publishMsg');
+          const pubMsg = document.getElementById('pubMsg');
           pubMsg.textContent = '提交中...';
-          const submitBtn = e.target.querySelector('button[type="submit"]');
-          submitBtn.disabled = true;
-
-          const form = new FormData(e.target);
-          const payload = {
-            title: form.get('title'),
-            date: form.get('date'),
-            category: form.get('category'),
-            slug: editingPath ? null : form.get('slug'),
-            tags: String(form.get('tags') || '').split(',').map((s) => s.trim()).filter(Boolean),
-            description: form.get('description'),
-            source: form.get('source'),
-            imageAlt: form.get('imageAlt'),
-            body: form.get('body'),
-            existingPath: editingPath,
-          };
-
-          const imgFile = form.get('image');
-          if (imgFile && imgFile.size) {
-            const ext = MIME_EXT[imgFile.type];
-            const base64 = await new Promise((res) => {
-              const r = new FileReader();
-              r.onload = () => { const m = /base64,(.*)$/.exec(r.result); res(m ? m[1] : ''); };
-              r.readAsDataURL(imgFile);
-            });
-            payload.image = { base64, ext };
-          }
-
+          const btn = e.target.querySelector('button[type="submit"]');
+          btn.disabled = true;
           try {
-            const res = await api('/publish', { method: 'POST', body: payload });
+            const d = collectForm();
+            const res = await api('/publish', { method: 'POST', body: buildPublishPayload(d) });
+            if (editingDraftUid) {
+              saveDrafts(loadDrafts().filter((x) => x.uid !== editingDraftUid));
+            }
             pubMsg.textContent = '';
             alert('✅ ' + res.message);
+            renderDraftSection();
             cancelEdit();
             loadList();
           } catch (err) {
             pubMsg.textContent = '';
-            submitBtn.disabled = false;
+            btn.disabled = false;
             alert('❌ ' + err.message);
           }
         }
 
-        // ── Init ──
-        if (token) {
-          showAdmin();
-        } else {
-          showLogin();
+        function buildPublishPayload(d) {
+          const payload = {
+            title: d.title, date: d.date, category: d.category,
+            slug: d.slug,
+            tags: d.tags, description: d.description, source: d.source,
+            imageAlt: d.imageAlt, body: d.body,
+            existingPath: d.existingPath,
+          };
+          if (d.image && d.image.kind === 'new' && d.image.base64 && d.image.ext) {
+            payload.image = { base64: d.image.base64, ext: d.image.ext };
+          }
+          return payload;
         }
+
+        async function publishDraft(uid) {
+          const d = loadDrafts().find((x) => x.uid === uid);
+          if (!d) return;
+          if (!/^[\p{L}\p{N}][\p{L}\p{N}_-]{0,60}$/u.test(d.slug || '')) {
+            alert('草稿 slug 非法，请先「编辑」填写合法 slug（或留空自动生成）'); return;
+          }
+          if (!confirm(`发布「${d.title}」？写入 GitHub 后触发三平台部署。`)) return;
+          try {
+            await api('/publish', { method: 'POST', body: buildPublishPayload(d) });
+            saveDrafts(loadDrafts().filter((x) => x.uid !== uid));
+            renderDraftSection();
+            loadList();
+            alert('✅ 已发布，CI 部署中（1-2 分钟上线）');
+          } catch (err) { alert('❌ ' + err.message); }
+        }
+
+        publishAllBtn.addEventListener('click', async () => {
+          const drafts = loadDrafts();
+          if (!drafts.length) return;
+          if (!confirm(`确定发布全部 ${drafts.length} 条草稿？将逐条写入 GitHub 并触发部署。`)) return;
+          const bad = [];
+          for (const d of [...drafts]) {
+            if (!/^[\p{L}\p{N}][\p{L}\p{N}_-]{0,60}$/u.test(d.slug || '')) { bad.push((d.title || '未命名') + '(slug 非法)'); continue; }
+            try {
+              await api('/publish', { method: 'POST', body: buildPublishPayload(d) });
+              saveDrafts(loadDrafts().filter((x) => x.uid !== d.uid));
+            } catch (err) { bad.push((d.title || '未命名') + '(' + err.message + ')'); }
+          }
+          renderDraftSection();
+          loadList();
+          alert(bad.length ? `⚠️ 完成，但有 ${bad.length} 条失败：\n` + bad.join('\n') : `✅ 全部 ${drafts.length} 条已发布，CI 部署中`);
+        });
+
+        // ───────── Init ─────────
+        if (token) showAdmin(); else showLogin();
       })();
     </script>
   </body>

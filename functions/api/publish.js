@@ -1,4 +1,4 @@
-import { json, github, auth, buildFrontmatter, toBase64, b64ByteLength, ghPath } from './_lib.js';
+import { json, github, auth, buildFrontmatter, toBase64, b64ByteLength, ghPath, parseFrontmatter } from './_lib.js';
 
 const CATEGORIES = ['meme', 'joke', 'quote', 'gif', 'image', 'other'];
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
@@ -64,10 +64,13 @@ export async function onRequestPost({ request, env }) {
         return json({ error: `已存在同名内容 "${contentPath}"，请更换 slug 或进入编辑模式` }, 409);
       }
     }
+    let originalImage = null;
     if (existingPath) {
       try {
         const existing = await github(`/repos/${env.GITHUB_REPO}/contents/${ghPath(existingPath)}?branch=main`, env);
         sha = existing.sha;
+        const { data: orig } = parseFrontmatter(atob(existing.content));
+        originalImage = orig.image || null;
       } catch (e) {
         return json({ error: `原内容不存在：${existingPath}` }, 404);
       }
@@ -96,6 +99,8 @@ export async function onRequestPost({ request, env }) {
       );
       data.image = `/images/memes/${imagePath.split('/').pop()}`;
       commits.push(`上传图片 ${data.image}`);
+    } else if (originalImage) {
+      data.image = originalImage;
     }
 
     // Build markdown (UTF-8 safe base64)
