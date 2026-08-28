@@ -224,6 +224,12 @@ const CAT_ICONS = { meme: '😂', joke: '🤣', quote: '✨', gif: '🎬', image
             listView.querySelectorAll('.editPubBtn').forEach((b) => b.addEventListener('click', () => loadEditor(b.dataset.path)));
             listView.querySelectorAll('.delPubBtn').forEach((b) => b.addEventListener('click', () => removeContent(b.dataset.path, b.dataset.name)));
           } catch (err) {
+            if (err.message === '未授权' || err.message === '凭证已过期') {
+              token = '';
+              localStorage.removeItem('dailyFunAdminToken');
+              showLogin();
+              return;
+            }
             listView.innerHTML = `<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-600">${esc(err.message)}</div>`;
           }
         }
@@ -298,6 +304,10 @@ const CAT_ICONS = { meme: '😂', joke: '🤣', quote: '✨', gif: '🎬', image
         }
 
         function fillEditor(data, body, existingPath) {
+          editorView.classList.remove('hidden');
+          listView.classList.add('hidden');
+          document.getElementById('newBtn').classList.add('hidden');
+          draftSection.classList.add('hidden');
           editorView.innerHTML = `
             <div class="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <div class="mb-4 flex items-center justify-between">
