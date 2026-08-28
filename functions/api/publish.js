@@ -1,4 +1,4 @@
-import { json, github, auth, buildFrontmatter, toBase64, b64ByteLength, ghPath, parseFrontmatter } from './_lib.js';
+import { json, github, auth, buildFrontmatter, toBase64, b64ByteLength, ghPath, parseFrontmatter, utf8FromB64 } from './_lib.js';
 
 const CATEGORIES = ['meme', 'joke', 'quote', 'gif', 'image', 'other'];
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
@@ -69,7 +69,7 @@ export async function onRequestPost({ request, env }) {
       try {
         const existing = await github(`/repos/${env.GITHUB_REPO}/contents/${ghPath(existingPath)}?branch=main`, env);
         sha = existing.sha;
-        const { data: orig } = parseFrontmatter(atob(existing.content));
+        const { data: orig } = parseFrontmatter(utf8FromB64(existing.content));
         originalImage = orig.image || null;
       } catch (e) {
         return json({ error: `原内容不存在：${existingPath}` }, 404);

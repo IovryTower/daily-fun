@@ -36,6 +36,13 @@ export function b64ByteLength(b64) {
   return (len * 3) / 4 - pad;
 }
 
+// Decode standard base64 to a UTF-8 string (GitHub contents API returns base64 of UTF-8 bytes)
+export function utf8FromB64(b64) {
+  const bin = atob(b64);
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return dec.decode(bytes);
+}
+
 function b64urlDecode(str) {
   const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
   const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));

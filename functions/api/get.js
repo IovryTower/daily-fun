@@ -1,4 +1,4 @@
-import { json, github, auth, parseFrontmatter, ghPath } from './_lib.js';
+import { json, github, auth, parseFrontmatter, ghPath, utf8FromB64 } from './_lib.js';
 
 export async function onRequestGet({ request, env }) {
   const denied = await auth(request, env);
@@ -11,7 +11,7 @@ export async function onRequestGet({ request, env }) {
       return json({ error: '非法的内容路径' }, 400);
     }
     const content = await github(`/repos/${env.GITHUB_REPO}/contents/${ghPath(path)}?branch=main`, env);
-    const md = atob(content.content);
+    const md = utf8FromB64(content.content);
     const { data, body } = parseFrontmatter(md);
     return json({ ok: true, path, sha: content.sha, data, body });
   } catch (e) {
