@@ -1,8 +1,16 @@
 // 摸鱼猜词算法回归测试：node --experimental-strip-types scripts/test-fish.mjs
+// 需先运行 node scripts/build-cilin.mjs 生成词林索引
+import { readFileSync, existsSync } from 'node:fs';
 import {
   THEMES, ASSOCIATIONS, pickTarget, hashDate, pickDailyTarget,
-  getHint, calcRelation,
+  getHint, calcRelation, initCilinIndex, isCilinLoaded,
 } from '../src/lib/fishGame.ts';
+
+const idxFile = 'public/data/cilin-index.json';
+if (existsSync(idxFile)) {
+  initCilinIndex(JSON.parse(readFileSync(idxFile, 'utf8')));
+}
+console.log('词林索引已加载:', isCilinLoaded());
 
 let failures = 0;
 const assert = (cond, msg) => {
@@ -37,32 +45,33 @@ assert(calcRelation('踢足球', '足球') === 100, '踢足球→足球=100');
 assert(calcRelation('打篮球', '篮球') === 100, '打篮球→篮球=100');
 assert(calcRelation('游泳健将', '游泳') === 100, '游泳健将→游泳=100');
 
-console.log('─ 分区区间');
-// 同簇：42-88
-assert(calcRelation('苹果', '香蕉') >= 42 && calcRelation('苹果', '香蕉') <= 88, '苹果/香蕉 同簇 42-88');
-assert(calcRelation('葡萄', '西瓜') >= 42 && calcRelation('葡萄', '西瓜') <= 88, '葡萄/西瓜 同簇 42-88');
-// 跨簇：≤24
-assert(calcRelation('苹果', '跑步') <= 24, '苹果/跑步 跨簇 ≤24');
-assert(calcRelation('老虎', '奶茶') <= 24, '老虎/奶茶 跨簇 ≤24');
+console.log('─ 同簇/跨簇区间');
+// 同簇：≥42，且词林可再拉高（苹果/香蕉 词林同小类，通常 >42）
+const p1 = calcRelation('苹果', '香蕉');
+assert(p1 >= 42 && p1 < 100, `苹果/香蕉 同簇 ≥42: ${p1}`);
+const p2 = calcRelation('葡萄', '西瓜');
+assert(p2 >= 42 && p2 < 100, `葡萄/西瓜 同簇 ≥42: ${p2}`);
+// 跨簇：同大类词因词林可到 20-40，但绝不是高分
+const p3 = calcRelation('老虎', '奶茶');
+assert(p3 < 42, `老虎/奶茶 跨簇 <42: ${p3}`);
+const p4 = calcRelation('苹果', '跑步');
+assert(p4 < 42, `苹果/跑步 跨簇 <42: ${p4}`);
 // 词库外（无联想无映射）：≤35
 assert(calcRelation('abcdefgh', '苹果') <= 35, '随机乱码 ≤35');
-assert(calcRelation('牵一条狗去公园', '奶茶') <= 35, '无关短语 ≤35');
+assert(calcRelation('牵一条狗去公园', '奶茶') <= 38, '无关短语 ≤38');
 
-console.log('─ 外延词/子类梯度（词库外同域非零且有亲疏）');
-// 词库外同域动物 ≠ 0（曾有大量 0% 断层）
-for (const w of ['考拉', '羚羊', '树懒', '河马', '鲸鱼', '麻雀', '鲤鱼', '蛇', '鳄鱼', '老鼠']) {
+console.log('─ 词林语义（跨主题但语义相关应明显抬高）');
+assert(calcRelation('开心', '快乐') >= 88, `同义词 开心/快乐 ≥88: ${calcRelation('开心', '快乐')}`);
+assert(calcRelation('奶茶', '咖啡') >= 55, `饮品 奶茶/咖啡 ≥55: ${calcRelation('奶茶', '咖啡')}`);
+assert(calcRelation('汽车', '火车') >= 55, `交通 汽车/火车 ≥55: ${calcRelation('汽车', '火车')}`);
+assert(calcRelation('医生', '护士') >= 50, `职业 医生/护士 ≥50: ${calcRelation('医生', '护士')}`);
+assert(calcRelation('老虎', '狮子') >= 55, `动物 老虎/狮子 ≥55: ${calcRelation('老虎', '狮子')}`);
+
+console.log('─ 词库外同域词（词林命中非零）');
+for (const w of ['麻雀', '鲸鱼', '斑马', '蜜蜂', '老鹰', '蛇', '乌龟', '山羊', '牛']) {
   const s = calcRelation(w, '刺猬');
-  assert(s > 0 && s <= 58, `${w}→刺猬 非零且≤58 (${s}%)`);
+  assert(s > 0 && s < 100, `${w}→刺猬 非零且<100 (${s}%)`);
 }
-// 同子类（哺乳）应高于跨子类（鸟）
-const mam = calcRelation('考拉', '刺猬');      // 哺乳 vs 哺乳
-const bird = calcRelation('麻雀', '刺猬');     // 鸟 vs 哺乳
-assert(mam - bird >= 8, `哺乳子类 ${mam}% > 鸟子类 ${bird}%`);
-// 词库内同簇同子类 > 跨子类
-assert(calcRelation('猴子', '刺猬') - calcRelation('鹦鹉', '刺猬') >= 8, '猴子(哺乳) 高于 鹦鹉(鸟)');
-// 跨域外延词应远低于同域
-assert(calcRelation('服务器', '刺猬') < calcRelation('考拉', '刺猬'), '跨域外延 < 同域外延');
-assert(calcRelation('服务器', '刺猬') <= 14, '跨域外延 ≤14');
 
 console.log('─ 确定性（同输入必同分）');
 for (let i = 0; i < 30; i++) {

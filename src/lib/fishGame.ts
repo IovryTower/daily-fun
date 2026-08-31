@@ -1,4 +1,6 @@
-// 摸鱼猜词：词库 + 关联度算法（纯前端，无外部依赖）
+// 摸鱼猜词：词库 + 关联度算法
+// 语义相似度主力 = 词林(哈工大同义词词林扩展版)编码树距离，build 时生成 public/data/cilin-index.json，
+// 浏览器加载后经 initCilinIndex 注入；未加载或目标词不在词林时回退字符/主题簇逻辑。
 
 export interface ThemeGroup {
   name: string;
@@ -29,146 +31,126 @@ export const THEMES: ThemeGroup[] = [
   { name: '游戏', emoji: '🎮', words: ['王者荣耀', '原神', '斗地主', '麻将', '象棋', '围棋', '五子棋', '跳棋', '扑克牌', '俄罗斯方块', '愤怒的小鸟', '我的世界'] },
 ];
 
-// 语义联想梯度表：目标词 → [联想词, 关联度%]。
-// 联想词位于词库外；输入命中联想词时返回对应分数，让词库外输入也有逼近感（"珍珠奶茶"对目标"奶茶"→92%）
+// 语义联想锚点：词库外或跨域的特指词 → 目标词的预设分数（词林没有的现代词/网络词优先于此）
 export const ASSOCIATIONS: Record<string, [string, number][]> = {
-  // 水果
-  '苹果': [['红富士', 92], ['青苹果', 86], ['乔布斯', 78], ['脆甜', 52]],
-  '西瓜': [['麒麟瓜', 90], ['解暑', 56], ['瓜子', 60]],
-  '香蕉': [['芭蕉', 88], ['果皮', 54]],
-  '橙子': [['脐橙', 90], ['维C', 58]],
-  '葡萄': [['葡萄干', 84], ['葡萄酒', 66]],
-  // 动物
-  '熊猫': [['国宝', 92], ['竹子', 88], ['团子', 82], ['四川', 60]],
-  '老虎': [['百兽之王', 90], ['东北虎', 86], ['森林之王', 92]],
-  '猫': [['猫咪', 90], ['小鱼干', 64], ['喵星人', 84]],
-  '狗': [['狗狗', 90], ['旺财', 74], ['看家', 58]],
-  // 食物
-  '火锅': [['鸳鸯锅', 92], ['麻辣烫', 86], ['串串香', 84], ['毛肚', 82], ['烫菜', 54]],
-  '饺子': [['水饺', 90], ['馄饨', 78], ['馅儿', 72], ['冬至', 58]],
-  '粽子': [['粽叶', 86], ['蛋黄粽', 78], ['屈原', 74]],
-  '汤圆': [['元宵', 88], ['黑芝麻', 74], ['团圆', 70]],
-  // 饮品
-  '奶茶': [['珍珠奶茶', 92], ['奶盖', 86], ['珍珠', 82], ['下午茶', 68]],
-  '咖啡': [['美式', 78], ['摩卡', 84], ['拿铁', 80], ['提神', 60]],
-  '啤酒': [['扎啤', 88], ['小麦啤', 82], ['撸串', 70]],
-  // 颜色（词库内联想走同簇逻辑，这里给跨域语义）
-  '蓝色': [['天空', 70], ['大海', 66]],
-  '金色': [['黄金', 80], ['土豪', 62]],
-  // 自然
-  '太阳': [['阳光', 90], ['温暖', 70], ['日晒', 62]],
-  '月亮': [['月光', 92], ['圆月', 88], ['嫦娥', 84]],
-  '彩虹': [['七色', 86], ['雨后', 70]],
-  '大海': [['海洋', 90], ['沙滩', 74], ['海风', 70]],
-  // 科技
-  '电脑': [['笔记本', 88], ['台式机', 90], ['开机', 64]],
-  '手机': [['智能手机', 90], ['苹果手机', 86], ['安卓', 78], ['刷机', 66]],
-  '键盘': [['敲键盘', 86], ['打字', 70]],
-  // 运动
-  '足球': [['世界杯', 86], ['梅西', 76], ['进球', 70]],
-  '篮球': [['NBA', 86], ['乔丹', 82], ['投篮', 76]],
-  '跑步': [['慢跑', 86], ['晨跑', 82], ['马拉松', 84]],
-  // 情绪
-  '开心': [['快乐', 92], ['高兴', 90], ['愉悦', 88]],
-  '难过': [['伤心', 92], ['悲伤', 90], ['泪目', 70]],
-  '愤怒': [['生气', 92], ['暴躁', 78], ['怒火', 80]],
-  // 职业
-  '程序员': [['码农', 92], ['敲代码', 86], ['秃头', 72], ['加班', 68]],
-  '医生': [['大夫', 90], ['白衣天使', 86], ['看病', 70]],
-  '老师': [['教师', 90], ['上课', 74], ['讲课', 72]],
-  '警察': [['公安', 86], ['抓小偷', 78], ['警车', 68]],
-  // 交通
-  '高铁': [['动车', 92], ['和谐号', 84], ['春运', 64]],
-  '地铁': [['轨道交通', 92], ['早高峰', 72], ['刷码进站', 62]],
-  // 节日
-  '春节': [['过年', 92], ['除夕', 88], ['拜年', 82], ['春晚', 78]],
-  '中秋节': [['月饼', 90], ['团圆', 82], ['赏月', 76]],
-  '端午节': [['粽子', 88], ['赛龙舟', 90], ['屈原', 82]],
-  // 建筑
-  '长城': [['万里长城', 92], ['八达岭', 88], ['秦始皇', 70]],
-  '大桥': [['跨海大桥', 90], ['港珠澳', 86], ['桥墩', 70]],
-  '城堡': [['公主', 66], ['护城河', 76], ['碉堡', 62]],
-  // 天气
-  '暴雨': [['大雨', 92], ['雷阵雨', 86], ['洪水', 80], ['小雨', 70], ['雨伞', 50]],
-  '下雪': [['堆雪人', 82], ['打雪仗', 84], ['雪景', 76]],
-  '晴天': [['大晴天', 92], ['阳光', 84], ['好天气', 78]],
-  // 星座（含跨簇：词库内"狮子"对"狮子座"）
+  '苹果': [['红富士', 92], ['青苹果', 86], ['乔布斯', 78]],
+  '西瓜': [['麒麟瓜', 90], ['解暑', 56]],
+  '香蕉': [['芭蕉', 88]],
+  '橙子': [['脐橙', 90]],
+  '熊猫': [['国宝', 92], ['团子', 82]],
+  '猫': [['猫咪', 90], ['喵星人', 84]],
+  '狗': [['狗狗', 90]],
+  '火锅': [['鸳鸯锅', 92], ['串串香', 84]],
+  '饺子': [['水饺', 90], ['馄饨', 78]],
+  '汤圆': [['元宵', 88]],
+  '奶茶': [['珍珠奶茶', 92], ['奶盖', 86], ['下午茶', 68]],
+  '啤酒': [['扎啤', 88]],
+  '太阳': [['阳光', 90]],
+  '月亮': [['嫦娥', 84], ['圆月', 88]],
+  '大海': [['海洋', 90]],
+  '电脑': [['台式机', 90]],
+  '手机': [['智能手机', 90], ['苹果手机', 86]],
+  '足球': [['世界杯', 86]],
+  '篮球': [['NBA', 86]],
+  '跑步': [['马拉松', 84]],
+  '开心': [['快乐', 92], ['高兴', 90]],
+  '难过': [['伤心', 92]],
+  '程序员': [['码农', 92], ['敲代码', 86]],
+  '医生': [['大夫', 90]],
+  '老师': [['教师', 90]],
+  '春节': [['过年', 92]],
+  '端午节': [['赛龙舟', 90]],
+  '中秋节': [['月饼', 90]],
+  '暴雨': [['雷阵雨', 86], ['洪水', 80]],
   '狮子座': [['狮子', 74], ['狮王', 70]],
-  '白羊座': [['羊', 60], ['牧羊', 58]],
-  // 游戏
-  '王者荣耀': [['英雄联盟', 88], ['打野', 80], ['排位赛', 82], ['峡谷', 70]],
-  '原神': [['提瓦特', 86], ['香菱', 78], ['抽卡', 70]],
-  '象棋': [['楚河汉界', 86], ['马走日', 78], ['将军', 74]],
-  // 服装
-  '牛仔裤': [['牛仔', 76], ['紧身裤', 66], ['修身', 62]],
-  '毛衣': [['针织衫', 84], ['暖和', 58], ['羊绒', 78]],
-  // 文具
-  '橡皮': [['擦铅笔', 78], ['改正', 52]],
-  '剪刀': [['咔嚓', 74], ['剪纸', 78]],
+  '王者荣耀': [['打野', 80]],
 };
 
-// 主题"外延词"表：词库外的常见同域成员。命中后仍算同域，给非零且分族的关联分，
-// 让"羚羊/树懒/河马"等词库外输入不再一律 0%。subs 为子分类（如动物的哺乳/鸟/水陆），同子类给梯度奖分。
-export const THEME_EXT: Record<string, { aliases: string[]; subs?: Record<string, string[]> }> = {
-  动物: {
-    aliases: ['考拉', '羚羊', '树懒', '河马', '鲸鱼', '斑马', '松鼠', '小猪', '猎豹', '麋鹿', '老鼠', '麻雀', '老鹰', '母鸡', '公鸡', '小鸡', '大鹅', '蛇', '乌龟', '虾', '螃蟹', '青蛙', '蝌蚪', '鲤鱼', '草鱼', '鲈鱼', '鲨鱼', '金鱼', '河豚', '鱿鱼', '乌贼', '蚊子', '苍蝇', '蟑螂', '蚂蚁', '蝴蝶', '蜜蜂', '蚯蚓', '蝙蝠', '狼', '鹿', '骆驼', '山羊', '牛', '马', '猪', '鸡', '鸭', '鹅', '鳄鱼', '鱼', '鱼类', '鸟', '小鸟'],
-    subs: {
-      哺乳: ['猫', '狗', '兔子', '老虎', '大象', '熊猫', '猴子', '狐狸', '狮子', '长颈鹿', '海豚', '绵羊', '袋鼠', '刺猬', '考拉', '羚羊', '树懒', '河马', '鲸鱼', '斑马', '松鼠', '小猪', '猎豹', '麋鹿', '老鼠', '蝙蝠', '狼', '鹿', '骆驼', '山羊', '牛', '马', '猪'],
-      鸟: ['企鹅', '鹦鹉', '麻雀', '老鹰', '母鸡', '公鸡', '小鸡', '大鹅', '鸡', '鸭', '鹅'],
-      水陆: ['蛇', '乌龟', '虾', '螃蟹', '青蛙', '蝌蚪', '鲤鱼', '草鱼', '鲈鱼', '鲨鱼', '金鱼', '河豚', '鱿鱼', '乌贼', '蚊子', '苍蝇', '蟑螂', '蚂蚁', '蝴蝶', '蜜蜂', '蚯蚓', '鳄鱼', '鱼'],
-    },
-  },
-  水果: { aliases: ['榴莲', '车厘子', '杨梅', '荔枝', '龙眼', '枇杷', '石榴', '甘蔗', '桑葚', '山楂', '牛油果', '圣女果', '沙田柚', '青提'] },
-  食物: { aliases: ['烧烤', '回锅肉', '酸菜鱼', '麻辣香锅', '兰州拉面', '烤鸭', '东坡肉', '小笼包', '生煎', '肉夹馍', '关东煮'] },
-  饮品: { aliases: ['冰红茶', '椰子汁', '燕麦奶', '卡布奇诺', '美式咖啡', '豆奶', '芒果汁', '柚子茶'] },
-  颜色: { aliases: ['天蓝', '湖绿', '酒红', '米白', '焦糖', '月白', '雾霾蓝', '荧光绿'] },
-  自然: { aliases: ['露珠', '流云', '晚霞', '朝阳', '潮汐', '彗星', '冰川', '陨石', '地震'] },
-  科技: { aliases: ['服务器', '显卡', '打印机', '传真机', '游戏机', '充电器', '智能手表', '无人机'] },
-  运动: { aliases: ['举重', '击剑', '摔跤', '体操', '高尔夫', '棒球', '橄榄球', '网球', '台球', '攀岩'] },
-  情绪: { aliases: ['欣喜', '郁闷', '忐忑', '委屈', '烦躁', '憧憬', '知足'] },
-  职业: { aliases: ['会计', '工程师', '保安', '导演', '编剧', '模特', '翻译', '主持人'] },
-  交通: { aliases: ['自驾', '共享单车', '直升飞机', '热气球', '帆船', '皮划艇'] },
-  乐器: { aliases: ['唢呐', '洞箫', '扬琴', '三弦', '木琴', '定音鼓'] },
-  文具: { aliases: ['文件夹', '便利贴', '涂改液', '三角板', '铅笔盒'] },
-  家电: { aliases: ['投影仪', '洗碗机', '烘干机', '净水器', '电热毯', '暖风机'] },
-  天气: { aliases: ['晴空', '阵雨', '毛毛雨', '梅雨', '沙尘暴', '龙卷风', '寒潮', '雾霾'] },
-  节日: { aliases: ['情人节', '妇女节', '植树节', '教师节', '护士节', '小年'] },
-  建筑: { aliases: ['摩天大楼', '金字塔', '天安门', '布达拉宫', '废墟', '木屋'] },
-  服装: { aliases: ['风衣', '短裤', '连衣裙', '卫衣', '夹克', '雨衣'] },
-  星座: { aliases: ['水瓶', '双鱼', '白羊', '金牛', '巨蟹', '狮子', '处女', '天秤', '天蝎', '射手', '摩羯'] },
-  游戏: { aliases: ['吃鸡', '英雄联盟', '塞尔达', '宝可梦', '阴阳师', '跑跑卡丁车', '扫雷'] },
-};
-
-const ALL_ALIASES = new Set(Object.values(THEME_EXT).flatMap((e) => e.aliases));
-
-function aliasThemeOf(word: string): ThemeGroup | undefined {
-  for (const [name, ext] of Object.entries(THEME_EXT)) {
-    if (ext.aliases.includes(word)) {
-      const t = THEMES.find((x) => x.name === name);
-      if (t) return t;
-    }
-  }
-  return undefined;
-}
-
-// 外延词子串映射：输入包含某个外延词时取最长者（"一只大鹅"→"大鹅"）
-function bestAliasSubstringMatch(input: string): string | null {
-  const matches = ALL_ALIASES.size > 0
-    ? [...ALL_ALIASES].filter((a) => input.includes(a))
-    : [];
+// 词库外短语映射：输入包含某个词库词时，取最长者（如"踢足球"→"足球"）
+function bestSubstringMatch(input: string): string | null {
+  const matches = THEMES.flatMap((t) => t.words).filter((w) => input.includes(w));
   if (matches.length === 0) return null;
   return matches.sort((a, b) => b.length - a.length)[0];
 }
 
-// 词所属子分类（遍历 all ext 的 subs）
-function aliasSubOf(word: string): string | null {
-  for (const ext of Object.values(THEME_EXT)) {
-    if (!ext.subs) continue;
-    for (const [key, list] of Object.entries(ext.subs)) {
-      if (list.includes(word)) return key;
+// 联想锚点：输入命中目标词的联想表（精确或作为子串）→ 返回预设分数；否则 null
+function matchAssociation(input: string, target: string): number | null {
+  const assoc = ASSOCIATIONS[target];
+  if (!assoc) return null;
+  const exact = assoc.find(([w]) => w === input);
+  if (exact) return exact[1];
+  const sub = assoc.find(([w]) => w.length >= 2 && input.includes(w));
+  if (sub) return sub[1];
+  return null;
+}
+
+const ALL_WORDS = new Set(THEMES.flatMap((t) => t.words));
+
+function themeOf(word: string): ThemeGroup | undefined {
+  return THEMES.find((t) => t.words.includes(word));
+}
+
+// 字符 n-gram Jaccard 相似度（词林覆盖不到时兜底）
+function charSimilarity(a: string, b: string): number {
+  if (a === b) return 1;
+  const grams = (s: string, n: number) => {
+    const set = new Set<string>();
+    for (let i = 0; i + n <= s.length; i++) set.add(s.slice(i, i + n));
+    return set;
+  };
+  const uniA = grams(a, 1), uniB = grams(b, 1);
+  const biA = grams(a, 2), biB = grams(b, 2);
+  const jac = (x: Set<string>, y: Set<string>) => {
+    if (x.size === 0 && y.size === 0) return 0;
+    let inter = 0;
+    for (const g of x) if (y.has(g)) inter++;
+    const union = x.size + y.size - inter;
+    return union === 0 ? 0 : inter / union;
+  };
+  return 0.6 * jac(uniA, uniB) + 0.4 * jac(biA, biB);
+}
+
+// ── 词林编码树相似度 ──────────────────────────────────────────────
+// 索引格式：{ 词: ["Aa01A01=", ...] }，编码后缀 = 同义 / # 相关 / @ 独立
+let CILIN_INDEX: Record<string, string[]> | null = null;
+
+export function initCilinIndex(idx: Record<string, string[]> | null): void {
+  CILIN_INDEX = idx;
+}
+export function isCilinLoaded(): boolean {
+  return CILIN_INDEX !== null;
+}
+
+// 两个词林的编码串的相似度（0-1）。同编码：= 义项 0.96 / # 相关 0.86；否则按前缀逐层推断
+function codeSim(a: string, b: string): number {
+  if (a === b) {
+    if (a.endsWith('=')) return 0.96;
+    if (a.endsWith('#')) return 0.86;
+    return 0.9; // @ 独立词（同编码通常即同词，已被 100 短路）
+  }
+  const A = a.slice(0, -1);
+  const B = b.slice(0, -1);
+  if (A[0] !== B[0]) return 0.1; // 不同大类
+  if (A[1] !== B[1]) return 0.25; // 同类不同中类
+  if (A.slice(2, 4) !== B.slice(2, 4)) return 0.45; // 同中类不同小类
+  if (A[4] !== B[4]) return 0.62; // 同小类不同词群
+  return 0.82; // 同词群，仅义项序号不同
+}
+
+// 取自两个词在词林中的最大编码对相似度；任一侧无编码返回 null
+function cilinSimRaw(a: string, b: string): number | null {
+  if (!CILIN_INDEX) return null;
+  const ca = CILIN_INDEX[a];
+  const cb = CILIN_INDEX[b];
+  if (!ca || !cb) return null;
+  let best = 0;
+  for (const x of ca) {
+    for (const y of cb) {
+      const s = codeSim(x, y);
+      if (s > best) best = s;
     }
   }
-  return null;
+  return best;
 }
 
 export function pickTarget(): string {
@@ -196,113 +178,40 @@ export function getHint(target: string): { themeName: string; emoji: string; len
   return { themeName: theme.name, emoji: theme.emoji, length: target.length };
 }
 
-// 字符 n-gram Jaccard 相似度（用于同簇区分 + 词库外兜底）
-function charSimilarity(a: string, b: string): number {
-  if (a === b) return 1;
-  const grams = (s: string, n: number) => {
-    const set = new Set<string>();
-    for (let i = 0; i + n <= s.length; i++) set.add(s.slice(i, i + n));
-    return set;
-  };
-  const uniA = grams(a, 1), uniB = grams(b, 1);
-  const biA = grams(a, 2), biB = grams(b, 2);
-  const jac = (x: Set<string>, y: Set<string>) => {
-    if (x.size === 0 && y.size === 0) return 0;
-    let inter = 0;
-    for (const g of x) if (y.has(g)) inter++;
-    const union = x.size + y.size - inter;
-    return union === 0 ? 0 : inter / union;
-  };
-  return 0.6 * jac(uniA, uniB) + 0.4 * jac(biA, biB);
-}
-
-const ALL_WORDS = new Set(THEMES.flatMap((t) => t.words));
-
-function themeOf(word: string): ThemeGroup | undefined {
-  return THEMES.find((t) => t.words.includes(word));
-}
-
-// 词库外短语映射：输入包含某个词库词时，取最长者（如"踢足球"→"足球"）
-function bestSubstringMatch(input: string): string | null {
-  const matches = THEMES.flatMap((t) => t.words).filter((w) => input.includes(w));
-  if (matches.length === 0) return null;
-  return matches.sort((a, b) => b.length - a.length)[0];
-}
-
-// 联想梯度：输入命中目标词的联想表（精确或作为子串）→ 返回预设分数；否则 null
-function matchAssociation(input: string, target: string): number | null {
-  const assoc = ASSOCIATIONS[target];
-  if (!assoc) return null;
-  const exact = assoc.find(([w]) => w === input);
-  if (exact) return exact[1];
-  const sub = assoc.find(([w]) => w.length >= 2 && input.includes(w));
-  if (sub) return sub[1];
-  return null;
-}
-
-// 核心：计算输入词与目标词的关联度（0-100，确定性无随机）
+// 核心：输入词与目标词的关联度（0-100，确定性无随机）
 export function calcRelation(input: string, target: string): number {
   const inputNorm = input.trim();
   if (!inputNorm) return 0;
   if (inputNorm === target) return 100;
 
-  // 语义联想（优先级高于字符兜底；词库内词也能靠联想获得跨簇高分，如"狮子"对"狮子座"）
+  // 1. 语义锚点联想（词林没有的现代词/网络词在这里拿高分）
   const assocScore = matchAssociation(inputNorm, target);
   if (assocScore !== null) return assocScore;
 
-  // 词库内直接用原词；词库外优先词库词子串映射，再外延词子串映射
-  let mapped: string;
-  let mappedIsAlias = false;
-  if (ALL_WORDS.has(inputNorm)) {
-    mapped = inputNorm;
+  // 2. 词库外短语映射到词库词（"踢足球"→"足球"）
+  const inLib = ALL_WORDS.has(inputNorm);
+  let base = inLib ? inputNorm : bestSubstringMatch(inputNorm) ?? inputNorm;
+  if (base === target) return 100;
+
+  // 3. 主题簇 + 字符兜底分
+  let score: number;
+  const baseTheme = themeOf(base);
+  const tTheme = themeOf(target);
+  if (baseTheme && tTheme && baseTheme.name === tTheme.name) {
+    score = 42 + charSimilarity(base, target) * 55; // 同簇 42-88
+  } else if (baseTheme) {
+    score = 6 + charSimilarity(base, target) * 18; // 跨簇 ≤24
   } else {
-    const libSub = bestSubstringMatch(inputNorm);
-    if (libSub) {
-      mapped = libSub;
-    } else {
-      const aliasSub = bestAliasSubstringMatch(inputNorm);
-      if (aliasSub) {
-        mapped = aliasSub;
-        mappedIsAlias = true;
-      } else {
-        mapped = inputNorm;
-      }
-    }
+    score = Math.min(35, charSimilarity(base, target) * 40); // 词库外兜底
   }
-  if (mapped === target) return 100;
+  score = Math.min(score, baseTheme && tTheme && baseTheme.name === tTheme.name ? 88 : baseTheme ? 24 : 35);
 
-  const tTheme = themeOf(target)!;
-  const tSub = aliasSubOf(target);
-
-  // 外延词：同域给非零且分族的梯度分，让词库外输入也有"亲疏"可循
-  if (mappedIsAlias) {
-    const th = aliasThemeOf(mapped);
-    if (th) {
-      if (th.name === tTheme.name) {
-        let s = 16 + charSimilarity(mapped, target) * 35;
-        const ms = aliasSubOf(mapped);
-        if (tSub && ms && tSub === ms) s += 12;
-        return Math.min(58, s);
-      }
-      return Math.min(14, 4 + charSimilarity(mapped, target) * 10);
-    }
-    return Math.min(35, charSimilarity(mapped, target) * 40);
+  // 4. 词林通用语义增强：两词都在词林时取较大者，跨主题的语义相关（如 奶茶→咖啡）
+  const c = cilinSimRaw(base, target);
+  if (c !== null) {
+    const cilinScore = 12 + c * 85;
+    if (cilinScore > score) score = cilinScore;
   }
 
-  // 词库内
-  const inTarget = themeOf(mapped);
-  if (inTarget) {
-    if (inTarget.name === tTheme.name) {
-      // 同簇：42-88，字符相似度拉开梯度；同子类（如同为哺乳动物）额外加成
-      let s = 42 + charSimilarity(mapped, target) * 55;
-      const ms = aliasSubOf(mapped);
-      if (tSub && ms && tSub === ms) s += 18;
-      return Math.min(88, s);
-    }
-    // 不同簇：确定性低分，共享零星字符时略高
-    return Math.min(24, 6 + charSimilarity(mapped, target) * 18);
-  }
-
-  // 词库外且无联想、无映射：字符相似度兜底
-  return Math.min(35, charSimilarity(inputNorm, target) * 40);
+  return Math.round(score);
 }

@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
+    "prebuild": "node scripts/prebuild.mjs",
     "build": "astro build",
     "build:cf": "CF_PAGES=1 astro build",
     "deploy:cf": "CF_PAGES=1 astro build && wrangler pages deploy dist --project-name daily-fun",

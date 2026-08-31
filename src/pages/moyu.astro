@@ -127,7 +127,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 </BaseLayout>
 
 <script>
-import { pickTarget, pickDailyTarget, getHint, calcRelation } from '../lib/fishGame';
+import { pickTarget, pickDailyTarget, getHint, calcRelation, initCilinIndex } from '../lib/fishGame';
+
+// 异步加载词林语义索引；失败静默回退字符/主题簇算法
+(async () => {
+  try {
+    const resp = await fetch(`${import.meta.env.BASE_URL}data/cilin-index.json`);
+    if (resp.ok) {
+      const data = await resp.json();
+      initCilinIndex(data);
+    }
+  } catch { /* 离线或失败时用兜底算法 */ }
+})();
 
 const state = {
   target: '', attempts: 0, lastPct: -1, mode: 'daily' as 'daily' | 'random',

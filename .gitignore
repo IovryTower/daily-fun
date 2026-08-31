@@ -1,6 +1,9 @@
 # build output
 dist/
 
+# generated cilin index (rebuilt by prebuild.mjs)
+public/data/
+
 # dependencies
 node_modules/
 package-lock.json
