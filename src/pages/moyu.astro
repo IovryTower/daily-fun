@@ -60,6 +60,40 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <p id="result-feedback" class="text-xs text-text-secondary"></p>
     </div>
 
+    <!-- 查看答案 -->
+    <div class="flex items-center justify-end">
+      <button id="reveal-btn" type="button" class="text-xs text-text-secondary transition-colors hover:text-accent">
+        😿 猜不出来？看答案
+      </button>
+    </div>
+    <div id="answer-row" class="hidden flex-col gap-2 rounded-xl border border-border bg-surface p-4">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-semibold text-text-primary">🔍 查看答案</span>
+        <span id="answer-cancel" class="cursor-pointer text-xs text-text-secondary hover:text-text-primary">取消</span>
+      </div>
+      <p id="answer-desc" class="text-xs text-text-secondary">直接看答案会放弃本局成绩与连击。输入「确认」以继续：</p>
+      <div class="flex gap-2">
+        <input
+          id="answer-input"
+          type="text"
+          maxlength="4"
+          autocomplete="off"
+          placeholder="输入：确认"
+          class="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none"
+        />
+        <button id="answer-confirm" type="button" class="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
+          查看
+        </button>
+      </div>
+    </div>
+    <div id="reveal-banner" class="hidden flex-col items-center gap-2 rounded-xl border border-orange-400 bg-orange-50 p-4 text-center dark:bg-orange-950/30">
+      <p class="text-lg font-bold text-text-primary">答案是「<span id="reveal-word" class="text-accent"></span>」</p>
+      <p class="text-xs text-text-secondary">你选择了直接查看，本局不计入成绩与连击 😼</p>
+      <button id="reveal-again" type="button" class="rounded-lg bg-badge-bg px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent hover:text-white">
+        再来一局
+      </button>
+    </div>
+
     <!-- 成功横幅 -->
     <div id="success-banner" class="hidden rounded-xl border border-emerald-400 bg-emerald-50 p-4 text-center dark:bg-emerald-950/30">
       <div class="text-4xl">🎉</div>
@@ -95,7 +129,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <script>
 import { pickTarget, pickDailyTarget, getHint, calcRelation } from '../lib/fishGame';
 
-const state = { target: '', attempts: 0, lastPct: -1, mode: 'daily' as 'daily' | 'random', pcts: [] as number[] };
+const state = {
+  target: '', attempts: 0, lastPct: -1, mode: 'daily' as 'daily' | 'random',
+  pcts: [] as number[],
+  entries: [] as { word: string; pct: number; hit: boolean }[],
+};
 const BEST_KEY = 'moyu-best';
 const STREAK_KEY = 'moyu-streak';
 const HIST_KEY = 'moyu-daily';
@@ -256,6 +294,11 @@ function startGame(mode: 'daily' | 'random') {
   (document.getElementById('share-text') as HTMLElement).classList.add('hidden');
   (document.getElementById('share-status') as HTMLElement).textContent = '';
   (document.getElementById('guess-history') as HTMLElement).innerHTML = '';
+  state.entries = [];
+  (document.getElementById('reveal-banner') as HTMLElement).classList.add('hidden');
+  (document.getElementById('answer-row') as HTMLElement).classList.add('hidden');
+  (document.getElementById('answer-input') as HTMLInputElement).value = '';
+  (document.getElementById('answer-desc') as HTMLElement).textContent = '直接看答案会放弃本局成绩与连击。输入「确认」以继续：';
   const input = document.getElementById('guess-input') as HTMLInputElement;
   input.value = '';
   input.disabled = false;
@@ -298,6 +341,27 @@ function showShare() {
   }
 }
 
+// 历史列表：按关联度降序渲染，最高概率排最前（命中 100% 置顶）
+function renderHistory() {
+  const history = document.getElementById('guess-history') as HTMLElement;
+  history.innerHTML = '';
+  const sorted = [...state.entries].sort((a, b) => b.pct - a.pct);
+  for (const e of sorted) {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2';
+    row.innerHTML = `
+      <span class="w-24 shrink-0 truncate text-sm font-medium text-text-primary"></span>
+      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-badge-bg">
+        <div class="h-full" style="width:${e.pct}%;background:${colorFor(e.pct)}"></div>
+      </div>
+      <span class="w-12 shrink-0 text-right text-xs font-semibold" style="color:${colorFor(e.pct)}"></span>
+    `;
+    row.querySelector('span')!.textContent = e.word;
+    row.querySelector('.w-12')!.textContent = `${e.pct.toFixed(1)}%`;
+    history.appendChild(row);
+  }
+}
+
 function submitGuess(word: string) {
   state.attempts++;
   const pct = calcRelation(word, state.target);
@@ -326,20 +390,9 @@ function submitGuess(word: string) {
   state.lastPct = pct;
     recordDailyGuess(pct, hit, state.target);
 
-  // 历史列表
-  const history = document.getElementById('guess-history') as HTMLElement;
-  const row = document.createElement('div');
-  row.className = 'flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2';
-  row.innerHTML = `
-    <span class="w-24 shrink-0 truncate text-sm font-medium text-text-primary"></span>
-    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-badge-bg">
-      <div class="h-full" style="width:${pct}%;background:${colorFor(pct)}"></div>
-    </div>
-    <span class="w-12 shrink-0 text-right text-xs font-semibold" style="color:${colorFor(pct)}"></span>
-  `;
-  row.querySelector('span')!.textContent = word;
-  row.querySelector('.w-12')!.textContent = `${pct.toFixed(1)}%`;
-  history.prepend(row);
+  // 历史列表：按关联度降序
+  state.entries.push({ word, pct, hit });
+  renderHistory();
 
   if (hit) {
     const banner = document.getElementById('success-banner') as HTMLElement;
@@ -377,6 +430,35 @@ document.getElementById('yesterday-btn')!.addEventListener('click', renderYester
 document.getElementById('yesterday-close')!.addEventListener('click', () => {
   (document.getElementById('yesterday-panel') as HTMLElement).classList.add('hidden');
 });
+
+// ── 查看答案：需输入「确认」才显示，本局不计成绩/连击 ──
+document.getElementById('reveal-btn')!.addEventListener('click', () => {
+  const row = document.getElementById('answer-row') as HTMLElement;
+  if (row.classList.contains('hidden')) {
+    row.classList.remove('hidden');
+    row.classList.add('flex');
+    (document.getElementById('answer-input') as HTMLInputElement).focus();
+  } else {
+    row.classList.add('hidden');
+  }
+});
+document.getElementById('answer-cancel')!.addEventListener('click', () => {
+  (document.getElementById('answer-row') as HTMLElement).classList.add('hidden');
+  (document.getElementById('answer-input') as HTMLInputElement).value = '';
+});
+document.getElementById('answer-confirm')!.addEventListener('click', () => {
+  const inp = document.getElementById('answer-input') as HTMLInputElement;
+  if (inp.value.trim() !== '确认') {
+    (document.getElementById('answer-desc') as HTMLElement).textContent = '请输入「确认」两个字才能查看答案，还想自己再努力一下吗？';
+    return;
+  }
+  (document.getElementById('answer-row') as HTMLElement).classList.add('hidden');
+  (document.getElementById('reveal-word') as HTMLElement).textContent = state.target;
+  (document.getElementById('reveal-banner') as HTMLElement).classList.remove('hidden');
+  (document.getElementById('reveal-banner') as HTMLElement).classList.add('flex');
+  (document.getElementById('guess-input') as HTMLInputElement).disabled = true;
+});
+document.getElementById('reveal-again')!.addEventListener('click', () => startGame(state.mode));
 
 startGame('daily');
 </script>

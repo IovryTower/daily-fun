@@ -59,6 +59,23 @@ import { pickDailyTarget } from '../src/lib/fishGame.ts';
 
   const historyCount = await page.locator('#guess-history > div').count();
   console.log('History entries:', historyCount);
+  const topWord = (await page.locator('#guess-history > div:first-child span').first().textContent())?.trim();
+  console.log('History top by pct:', topWord);
+
+  // 查看答案：需输入「确认」才显示
+  await page.click('#reveal-btn');
+  await page.waitForTimeout(80);
+  const answerRowVisible = await page.locator('#answer-row').isVisible();
+  await page.fill('#answer-input', '错了');
+  await page.click('#answer-confirm');
+  await page.waitForTimeout(50);
+  const stillBlocked = await page.locator('#reveal-banner').isHidden();
+  await page.fill('#answer-input', '确认');
+  await page.click('#answer-confirm');
+  await page.waitForTimeout(80);
+  const revealVisible = await page.locator('#reveal-banner').isVisible();
+  const revealWord = (await page.textContent('#reveal-word') || '').trim();
+  console.log('Answer row visible:', answerRowVisible, '| wrong try blocked:', stillBlocked, '| revealed:', revealVisible, revealWord);
 
   // 注入"昨天"的记录并刷新，验证昨日回顾面板
   await page.evaluate(() => {

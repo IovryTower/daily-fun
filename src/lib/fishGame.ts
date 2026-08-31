@@ -107,6 +107,70 @@ export const ASSOCIATIONS: Record<string, [string, number][]> = {
   '剪刀': [['咔嚓', 74], ['剪纸', 78]],
 };
 
+// 主题"外延词"表：词库外的常见同域成员。命中后仍算同域，给非零且分族的关联分，
+// 让"羚羊/树懒/河马"等词库外输入不再一律 0%。subs 为子分类（如动物的哺乳/鸟/水陆），同子类给梯度奖分。
+export const THEME_EXT: Record<string, { aliases: string[]; subs?: Record<string, string[]> }> = {
+  动物: {
+    aliases: ['考拉', '羚羊', '树懒', '河马', '鲸鱼', '斑马', '松鼠', '小猪', '猎豹', '麋鹿', '老鼠', '麻雀', '老鹰', '母鸡', '公鸡', '小鸡', '大鹅', '蛇', '乌龟', '虾', '螃蟹', '青蛙', '蝌蚪', '鲤鱼', '草鱼', '鲈鱼', '鲨鱼', '金鱼', '河豚', '鱿鱼', '乌贼', '蚊子', '苍蝇', '蟑螂', '蚂蚁', '蝴蝶', '蜜蜂', '蚯蚓', '蝙蝠', '狼', '鹿', '骆驼', '山羊', '牛', '马', '猪', '鸡', '鸭', '鹅', '鳄鱼', '鱼', '鱼类', '鸟', '小鸟'],
+    subs: {
+      哺乳: ['猫', '狗', '兔子', '老虎', '大象', '熊猫', '猴子', '狐狸', '狮子', '长颈鹿', '海豚', '绵羊', '袋鼠', '刺猬', '考拉', '羚羊', '树懒', '河马', '鲸鱼', '斑马', '松鼠', '小猪', '猎豹', '麋鹿', '老鼠', '蝙蝠', '狼', '鹿', '骆驼', '山羊', '牛', '马', '猪'],
+      鸟: ['企鹅', '鹦鹉', '麻雀', '老鹰', '母鸡', '公鸡', '小鸡', '大鹅', '鸡', '鸭', '鹅'],
+      水陆: ['蛇', '乌龟', '虾', '螃蟹', '青蛙', '蝌蚪', '鲤鱼', '草鱼', '鲈鱼', '鲨鱼', '金鱼', '河豚', '鱿鱼', '乌贼', '蚊子', '苍蝇', '蟑螂', '蚂蚁', '蝴蝶', '蜜蜂', '蚯蚓', '鳄鱼', '鱼'],
+    },
+  },
+  水果: { aliases: ['榴莲', '车厘子', '杨梅', '荔枝', '龙眼', '枇杷', '石榴', '甘蔗', '桑葚', '山楂', '牛油果', '圣女果', '沙田柚', '青提'] },
+  食物: { aliases: ['烧烤', '回锅肉', '酸菜鱼', '麻辣香锅', '兰州拉面', '烤鸭', '东坡肉', '小笼包', '生煎', '肉夹馍', '关东煮'] },
+  饮品: { aliases: ['冰红茶', '椰子汁', '燕麦奶', '卡布奇诺', '美式咖啡', '豆奶', '芒果汁', '柚子茶'] },
+  颜色: { aliases: ['天蓝', '湖绿', '酒红', '米白', '焦糖', '月白', '雾霾蓝', '荧光绿'] },
+  自然: { aliases: ['露珠', '流云', '晚霞', '朝阳', '潮汐', '彗星', '冰川', '陨石', '地震'] },
+  科技: { aliases: ['服务器', '显卡', '打印机', '传真机', '游戏机', '充电器', '智能手表', '无人机'] },
+  运动: { aliases: ['举重', '击剑', '摔跤', '体操', '高尔夫', '棒球', '橄榄球', '网球', '台球', '攀岩'] },
+  情绪: { aliases: ['欣喜', '郁闷', '忐忑', '委屈', '烦躁', '憧憬', '知足'] },
+  职业: { aliases: ['会计', '工程师', '保安', '导演', '编剧', '模特', '翻译', '主持人'] },
+  交通: { aliases: ['自驾', '共享单车', '直升飞机', '热气球', '帆船', '皮划艇'] },
+  乐器: { aliases: ['唢呐', '洞箫', '扬琴', '三弦', '木琴', '定音鼓'] },
+  文具: { aliases: ['文件夹', '便利贴', '涂改液', '三角板', '铅笔盒'] },
+  家电: { aliases: ['投影仪', '洗碗机', '烘干机', '净水器', '电热毯', '暖风机'] },
+  天气: { aliases: ['晴空', '阵雨', '毛毛雨', '梅雨', '沙尘暴', '龙卷风', '寒潮', '雾霾'] },
+  节日: { aliases: ['情人节', '妇女节', '植树节', '教师节', '护士节', '小年'] },
+  建筑: { aliases: ['摩天大楼', '金字塔', '天安门', '布达拉宫', '废墟', '木屋'] },
+  服装: { aliases: ['风衣', '短裤', '连衣裙', '卫衣', '夹克', '雨衣'] },
+  星座: { aliases: ['水瓶', '双鱼', '白羊', '金牛', '巨蟹', '狮子', '处女', '天秤', '天蝎', '射手', '摩羯'] },
+  游戏: { aliases: ['吃鸡', '英雄联盟', '塞尔达', '宝可梦', '阴阳师', '跑跑卡丁车', '扫雷'] },
+};
+
+const ALL_ALIASES = new Set(Object.values(THEME_EXT).flatMap((e) => e.aliases));
+
+function aliasThemeOf(word: string): ThemeGroup | undefined {
+  for (const [name, ext] of Object.entries(THEME_EXT)) {
+    if (ext.aliases.includes(word)) {
+      const t = THEMES.find((x) => x.name === name);
+      if (t) return t;
+    }
+  }
+  return undefined;
+}
+
+// 外延词子串映射：输入包含某个外延词时取最长者（"一只大鹅"→"大鹅"）
+function bestAliasSubstringMatch(input: string): string | null {
+  const matches = ALL_ALIASES.size > 0
+    ? [...ALL_ALIASES].filter((a) => input.includes(a))
+    : [];
+  if (matches.length === 0) return null;
+  return matches.sort((a, b) => b.length - a.length)[0];
+}
+
+// 词所属子分类（遍历 all ext 的 subs）
+function aliasSubOf(word: string): string | null {
+  for (const ext of Object.values(THEME_EXT)) {
+    if (!ext.subs) continue;
+    for (const [key, list] of Object.entries(ext.subs)) {
+      if (list.includes(word)) return key;
+    }
+  }
+  return null;
+}
+
 export function pickTarget(): string {
   const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
   return theme.words[Math.floor(Math.random() * theme.words.length)];
@@ -186,18 +250,54 @@ export function calcRelation(input: string, target: string): number {
   const assocScore = matchAssociation(inputNorm, target);
   if (assocScore !== null) return assocScore;
 
-  // 词库内直接用原词；词库外尝试包含映射（"踢足球"→"足球"），映射命中目标则视为猜中
-  const mapped =
-    ALL_WORDS.has(inputNorm) ? inputNorm : bestSubstringMatch(inputNorm) ?? inputNorm;
+  // 词库内直接用原词；词库外优先词库词子串映射，再外延词子串映射
+  let mapped: string;
+  let mappedIsAlias = false;
+  if (ALL_WORDS.has(inputNorm)) {
+    mapped = inputNorm;
+  } else {
+    const libSub = bestSubstringMatch(inputNorm);
+    if (libSub) {
+      mapped = libSub;
+    } else {
+      const aliasSub = bestAliasSubstringMatch(inputNorm);
+      if (aliasSub) {
+        mapped = aliasSub;
+        mappedIsAlias = true;
+      } else {
+        mapped = inputNorm;
+      }
+    }
+  }
   if (mapped === target) return 100;
 
-  const inTarget = themeOf(mapped);
   const tTheme = themeOf(target)!;
+  const tSub = aliasSubOf(target);
 
+  // 外延词：同域给非零且分族的梯度分，让词库外输入也有"亲疏"可循
+  if (mappedIsAlias) {
+    const th = aliasThemeOf(mapped);
+    if (th) {
+      if (th.name === tTheme.name) {
+        let s = 16 + charSimilarity(mapped, target) * 35;
+        const ms = aliasSubOf(mapped);
+        if (tSub && ms && tSub === ms) s += 12;
+        return Math.min(58, s);
+      }
+      return Math.min(14, 4 + charSimilarity(mapped, target) * 10);
+    }
+    return Math.min(35, charSimilarity(mapped, target) * 40);
+  }
+
+  // 词库内
+  const inTarget = themeOf(mapped);
   if (inTarget) {
     if (inTarget.name === tTheme.name) {
-      // 同簇：42-88，字符相似度拉开梯度（共享字越多越接近）
-      return Math.min(88, 42 + charSimilarity(mapped, target) * 55);
+      // 同簇：42-88，字符相似度拉开梯度；同子类（如同为哺乳动物）额外加成
+      let s = 42 + charSimilarity(mapped, target) * 55;
+      const ms = aliasSubOf(mapped);
+      if (tSub && ms && tSub === ms) s += 18;
+      return Math.min(88, s);
     }
     // 不同簇：确定性低分，共享零星字符时略高
     return Math.min(24, 6 + charSimilarity(mapped, target) * 18);

@@ -48,6 +48,22 @@ assert(calcRelation('老虎', '奶茶') <= 24, '老虎/奶茶 跨簇 ≤24');
 assert(calcRelation('abcdefgh', '苹果') <= 35, '随机乱码 ≤35');
 assert(calcRelation('牵一条狗去公园', '奶茶') <= 35, '无关短语 ≤35');
 
+console.log('─ 外延词/子类梯度（词库外同域非零且有亲疏）');
+// 词库外同域动物 ≠ 0（曾有大量 0% 断层）
+for (const w of ['考拉', '羚羊', '树懒', '河马', '鲸鱼', '麻雀', '鲤鱼', '蛇', '鳄鱼', '老鼠']) {
+  const s = calcRelation(w, '刺猬');
+  assert(s > 0 && s <= 58, `${w}→刺猬 非零且≤58 (${s}%)`);
+}
+// 同子类（哺乳）应高于跨子类（鸟）
+const mam = calcRelation('考拉', '刺猬');      // 哺乳 vs 哺乳
+const bird = calcRelation('麻雀', '刺猬');     // 鸟 vs 哺乳
+assert(mam - bird >= 8, `哺乳子类 ${mam}% > 鸟子类 ${bird}%`);
+// 词库内同簇同子类 > 跨子类
+assert(calcRelation('猴子', '刺猬') - calcRelation('鹦鹉', '刺猬') >= 8, '猴子(哺乳) 高于 鹦鹉(鸟)');
+// 跨域外延词应远低于同域
+assert(calcRelation('服务器', '刺猬') < calcRelation('考拉', '刺猬'), '跨域外延 < 同域外延');
+assert(calcRelation('服务器', '刺猬') <= 14, '跨域外延 ≤14');
+
 console.log('─ 确定性（同输入必同分）');
 for (let i = 0; i < 30; i++) {
   const t = pickTarget();
