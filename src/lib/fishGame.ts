@@ -59,27 +59,37 @@ function themeOf(word: string): ThemeGroup | undefined {
   return THEMES.find((t) => t.words.includes(word));
 }
 
-// 核心：计算输入词与目标词的关联度（0-100）
+// 词库外短语映射：输入包含某个词库词时，取最长者（如"踢足球"→"足球"）
+function bestSubstringMatch(input: string): string | null {
+  const matches = THEMES.flatMap((t) => t.words).filter((w) => input.includes(w));
+  if (matches.length === 0) return null;
+  return matches.sort((a, b) => b.length - a.length)[0];
+}
+
+// 核心：计算输入词与目标词的关联度（0-100，确定性无随机）
 export function calcRelation(input: string, target: string): number {
   const inputNorm = input.trim();
   if (!inputNorm) return 0;
   if (inputNorm === target) return 100;
 
-  const inTarget = themeOf(inputNorm);
+  // 词库内直接用原词；词库外尝试包含映射（"踢足球"→"足球"），映射命中目标则视为猜中
+  const mapped =
+    ALL_WORDS.has(inputNorm) ? inputNorm : bestSubstringMatch(inputNorm) ?? inputNorm;
+  if (mapped === target) return 100;
+
+  const inTarget = themeOf(mapped);
   const tTheme = themeOf(target)!;
 
   if (inTarget) {
     if (inTarget.name === tTheme.name) {
-      // 同簇：55-88，依字符相似度微调 + 随机扰动
-      const base = 55 + charSimilarity(inputNorm, target) * 28;
-      const jitter = (Math.random() - 0.5) * 5;
-      return Math.min(88, Math.max(55, base + jitter));
+      // 同簇：42-88，字符相似度拉开梯度（共享字越多越接近）
+      return Math.min(88, 42 + charSimilarity(mapped, target) * 55);
     }
-    // 不同簇
-    return 6 + Math.random() * 18;
+    // 不同簇：确定性低分，共享零星字符时略高
+    return Math.min(24, 6 + charSimilarity(mapped, target) * 18);
   }
 
-  // 词库外：字符相似度兜底
+  // 词库外且无映射：字符相似度兜底
   return Math.min(35, charSimilarity(inputNorm, target) * 40);
 }
 
