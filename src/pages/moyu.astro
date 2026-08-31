@@ -1,0 +1,157 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="摸鱼猜词" description="输入词语猜测隐藏目标词，看关联度直到猜中">
+  <section class="mb-6">
+    <h1 class="text-2xl font-bold text-text-primary">🧠 摸鱼猜词</h1>
+    <p class="mt-1 text-sm text-text-secondary">系统藏了一个词语，输入任意词看它与目标词的关联度，猜中（100%）才算成功</p>
+  </section>
+
+  <div id="game" class="flex flex-col gap-4">
+    <!-- 提示卡 -->
+    <div class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-4">
+      <span id="hint-theme" class="rounded-lg bg-badge-bg px-3 py-1 text-sm font-semibold text-text-primary">加载中…</span>
+      <span id="hint-length" class="text-sm text-text-secondary"></span>
+      <div class="ml-auto flex items-center gap-2">
+        <span id="attempt-count" class="text-xs text-text-secondary">第 0 次</span>
+        <button id="new-game" type="button" class="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
+          换一题
+        </button>
+      </div>
+    </div>
+
+    <!-- 输入区 -->
+    <form id="guess-form" class="flex gap-2">
+      <input
+        id="guess-input"
+        type="text"
+        autocomplete="off"
+        placeholder="输入一个词语，如：苹果"
+        maxlength="12"
+        class="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:border-accent focus:outline-none"
+      />
+      <button type="submit" class="shrink-0 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
+        猜！
+      </button>
+    </form>
+
+    <!-- 结果提示 -->
+    <div id="result-bar" class="hidden flex-col gap-1.5 rounded-xl border border-border bg-surface p-4">
+      <div class="flex items-baseline justify-between">
+        <span id="result-word" class="text-sm font-semibold text-text-primary"></span>
+        <span id="result-pct" class="text-2xl font-bold"></span>
+      </div>
+      <div class="h-2 w-full overflow-hidden rounded-full bg-badge-bg">
+        <div id="result-fill" class="h-full rounded-full transition-all duration-300" style="width:0%"></div>
+      </div>
+      <p id="result-feedback" class="text-xs text-text-secondary"></p>
+    </div>
+
+    <!-- 成功横幅 -->
+    <div id="success-banner" class="hidden rounded-xl border border-emerald-400 bg-emerald-50 p-4 text-center dark:bg-emerald-950/30">
+      <div class="text-4xl">🎉</div>
+      <p class="mt-2 text-lg font-bold text-text-primary">猜中啦！目标词就是「<span id="success-word" class="text-accent"></span>」</p>
+      <p id="success-attempts" class="mt-1 text-sm text-text-secondary"></p>
+      <button id="again-btn" type="button" class="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
+        再来一局
+      </button>
+    </div>
+
+    <!-- 历史猜测 -->
+    <div id="guess-history" class="flex flex-col gap-1.5"></div>
+  </div>
+</BaseLayout>
+
+<script>
+import { pickTarget, getHint, calcRelation } from '../lib/fishGame';
+
+const state = { target: '', attempts: 0, lastPct: -1 };
+
+function newGame() {
+  state.target = pickTarget();
+  state.attempts = 0;
+  state.lastPct = -1;
+  const hint = getHint(state.target);
+  (document.getElementById('hint-theme') as HTMLElement).textContent =
+    `${hint.emoji} 目标属于「${hint.themeName}」`;
+  (document.getElementById('hint-length') as HTMLElement).textContent =
+    `这是一个 ${hint.length} 字词语`;
+  (document.getElementById('attempt-count') as HTMLElement).textContent = '第 0 次';
+  (document.getElementById('success-banner') as HTMLElement).classList.add('hidden');
+  (document.getElementById('result-bar') as HTMLElement).classList.add('hidden');
+  (document.getElementById('guess-history') as HTMLElement).innerHTML = '';
+  (document.getElementById('guess-input') as HTMLInputElement).value = '';
+  (document.getElementById('guess-input') as HTMLInputElement).focus();
+}
+
+function colorFor(pct: number): string {
+  if (pct >= 88) return '#10B981';   // 绿
+  if (pct >= 65) return '#84CC16';   // 黄绿
+  if (pct >= 35) return '#F59E0B';   // 橙
+  return '#EF4444';                  // 红
+}
+
+function submitGuess(word: string) {
+  state.attempts++;
+  const pct = calcRelation(word, state.target);
+  const hit = pct >= 100;
+  (document.getElementById('attempt-count') as HTMLElement).textContent = `第 ${state.attempts} 次`;
+
+  const bar = document.getElementById('result-bar') as HTMLElement;
+  bar.classList.remove('hidden');
+  bar.classList.add('flex');
+  (document.getElementById('result-word') as HTMLElement).textContent = word;
+  (document.getElementById('result-pct') as HTMLElement).textContent = `${pct.toFixed(1)}%`;
+  (document.getElementById('result-pct') as HTMLElement).style.color = colorFor(pct);
+  const fill = document.getElementById('result-fill') as HTMLElement;
+  fill.style.width = `${pct}%`;
+  fill.style.background = colorFor(pct);
+
+  const feedback = document.getElementById('result-feedback') as HTMLElement;
+  if (hit) {
+    feedback.textContent = '💯 完美命中！';
+  } else if (state.lastPct >= 0) {
+    feedback.textContent = pct > state.lastPct ? '↑ 比上一次更接近目标了' : '↓ 比上一次更远了';
+  } else {
+    feedback.textContent = '再试试其他词语';
+  }
+  state.lastPct = pct;
+
+  // 历史列表
+  const history = document.getElementById('guess-history') as HTMLElement;
+  const row = document.createElement('div');
+  row.className = 'flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2';
+  row.innerHTML = `
+    <span class="w-24 shrink-0 truncate text-sm font-medium text-text-primary"></span>
+    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-badge-bg">
+      <div class="h-full" style="width:${pct}%;background:${colorFor(pct)}"></div>
+    </div>
+    <span class="w-12 shrink-0 text-right text-xs font-semibold" style="color:${colorFor(pct)}"></span>
+  `;
+  row.querySelector('span')!.textContent = word;
+  row.querySelector('.w-12')!.textContent = `${pct.toFixed(1)}%`;
+  history.prepend(row);
+
+  if (hit) {
+    const banner = document.getElementById('success-banner') as HTMLElement;
+    (document.getElementById('success-word') as HTMLElement).textContent = state.target;
+    (document.getElementById('success-attempts') as HTMLElement).textContent = `用了 ${state.attempts} 次猜中`;
+    banner.classList.remove('hidden');
+    (document.getElementById('guess-input') as HTMLInputElement).disabled = true;
+  }
+}
+
+document.getElementById('guess-form')!.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('guess-input') as HTMLInputElement;
+  const word = input.value.trim();
+  if (word) submitGuess(word);
+  input.value = '';
+});
+
+document.getElementById('new-game')!.addEventListener('click', newGame);
+document.getElementById('again-btn')!.addEventListener('click', newGame);
+
+newGame();
+</script>

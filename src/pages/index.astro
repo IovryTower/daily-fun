@@ -19,6 +19,16 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     <h1 class="text-2xl font-bold text-text-primary">今日推荐</h1>
     <p class="mt-1 text-sm text-text-secondary">每日搞笑图片、文字、GIF、Meme — 适合摸鱼放松</p>
   </section>
+  <a
+    href={`${base}/moyu`}
+    class="mb-8 flex items-center justify-between gap-4 rounded-xl border border-border bg-surface p-5 transition-shadow hover:shadow-[0_4px_12px_var(--color-card-shadow)]"
+  >
+    <div>
+      <h2 class="text-lg font-bold text-text-primary">🧠 摸鱼猜词</h2>
+      <p class="mt-1 text-sm text-text-secondary">输入词语猜隐藏目标词，看关联度% 一路猜中 —— 摸鱼放松新玩法</p>
+    </div>
+    <span class="shrink-0 text-sm font-medium text-accent">去玩玩 →</span>
+  </a>
   <FunFeed items={pageData} />
   {lastPage > 1 && (
     <nav class="mt-8 flex items-center justify-center gap-1" aria-label="分页导航">
