@@ -8,6 +8,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <p class="mt-1 text-sm text-text-secondary">系统藏了一个词语，输入任意词看它与目标词的关联度，猜中（100%）才算成功</p>
   </section>
 
+  <div id="mode-banner" class="-mt-2 mb-4 flex flex-wrap items-center gap-2 text-sm">
+    <span id="mode-daily" class="hidden items-center gap-1.5 rounded-lg bg-badge-bg px-3 py-1 font-semibold text-text-primary"></span>
+    <span id="mode-random" class="hidden items-center gap-1.5 rounded-lg bg-badge-bg px-3 py-1 font-semibold text-text-primary"></span>
+  </div>
+
   <div id="game" class="flex flex-col gap-4">
     <!-- 提示卡 -->
     <div class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-4">
@@ -15,8 +20,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <span id="hint-length" class="text-sm text-text-secondary"></span>
       <div class="ml-auto flex items-center gap-2">
         <span id="attempt-count" class="text-xs text-text-secondary">第 0 次</span>
+        <button id="back-daily" type="button" class="hidden rounded-lg bg-badge-bg px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-accent hover:text-white">
+          ↩ 回到今日题
+        </button>
         <button id="new-game" type="button" class="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
-          换一题
+          🎲 随机一题
         </button>
       </div>
     </div>
@@ -53,7 +61,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div class="text-4xl">🎉</div>
       <p class="mt-2 text-lg font-bold text-text-primary">猜中啦！目标词就是「<span id="success-word" class="text-accent"></span>」</p>
       <p id="success-attempts" class="mt-1 text-sm text-text-secondary"></p>
-      <button id="again-btn" type="button" class="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
+      <p id="success-best" class="mt-0.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400"></p>
+      <div class="mt-3 flex flex-col items-center gap-2">
+        <button id="share-btn" type="button" class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover">
+          📤 复制分享
+        </button>
+        <span id="share-status" class="text-xs text-text-secondary"></span>
+        <div id="share-text" class="mt-1 hidden w-full max-w-xs whitespace-pre-wrap rounded-lg bg-badge-bg p-3 text-left font-mono text-xs text-text-primary"></div>
+      </div>
+      <button id="again-btn" type="button" class="mt-3 rounded-lg bg-badge-bg px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent hover:text-white">
         再来一局
       </button>
     </div>
@@ -64,25 +80,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 </BaseLayout>
 
 <script>
-import { pickTarget, getHint, calcRelation } from '../lib/fishGame';
+import { pickTarget, pickDailyTarget, getHint, calcRelation } from '../lib/fishGame';
 
-const state = { target: '', attempts: 0, lastPct: -1 };
+const state = { target: '', attempts: 0, lastPct: -1, mode: 'daily', pcts: [] as number[] };
+const BEST_KEY = 'moyu-best';
 
-function newGame() {
-  state.target = pickTarget();
-  state.attempts = 0;
-  state.lastPct = -1;
-  const hint = getHint(state.target);
-  (document.getElementById('hint-theme') as HTMLElement).textContent =
-    `${hint.emoji} 目标属于「${hint.themeName}」`;
-  (document.getElementById('hint-length') as HTMLElement).textContent =
-    `这是一个 ${hint.length} 字词语`;
-  (document.getElementById('attempt-count') as HTMLElement).textContent = '第 0 次';
-  (document.getElementById('success-banner') as HTMLElement).classList.add('hidden');
-  (document.getElementById('result-bar') as HTMLElement).classList.add('hidden');
-  (document.getElementById('guess-history') as HTMLElement).innerHTML = '';
-  (document.getElementById('guess-input') as HTMLInputElement).value = '';
-  (document.getElementById('guess-input') as HTMLInputElement).focus();
+function dateLabel(d = new Date()): string {
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function emojiFor(pct: number): string {
+  if (pct >= 88) return '🟩';
+  if (pct >= 65) return '🟨';
+  if (pct >= 35) return '🟧';
+  if (pct > 0) return '🟥';
+  return '⬛';
 }
 
 function colorFor(pct: number): string {
@@ -92,10 +104,83 @@ function colorFor(pct: number): string {
   return '#EF4444';                  // 红
 }
 
+function getBest(): number {
+  return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
+}
+
+function startGame(mode: 'daily' | 'random') {
+  state.mode = mode;
+  state.target = mode === 'daily' ? pickDailyTarget(new Date()) : pickTarget();
+  state.attempts = 0;
+  state.lastPct = -1;
+  state.pcts = [];
+
+  const dailyEl = document.getElementById('mode-daily') as HTMLElement;
+  const randomEl = document.getElementById('mode-random') as HTMLElement;
+  dailyEl.classList.toggle('hidden', mode !== 'daily');
+  dailyEl.classList.toggle('flex', mode === 'daily');
+  dailyEl.textContent = `📅 今日题 · ${dateLabel()}`;
+  randomEl.classList.toggle('hidden', mode !== 'random');
+  randomEl.classList.toggle('flex', mode === 'random');
+  randomEl.textContent = '🎲 随机练习';
+  (document.getElementById('back-daily') as HTMLElement).classList.toggle('hidden', mode !== 'random');
+
+  const hint = getHint(state.target);
+  (document.getElementById('hint-theme') as HTMLElement).textContent =
+    `${hint.emoji} 目标属于「${hint.themeName}」`;
+  (document.getElementById('hint-length') as HTMLElement).textContent =
+    `这是一个 ${hint.length} 字词语`;
+  (document.getElementById('attempt-count') as HTMLElement).textContent = '第 0 次';
+  (document.getElementById('success-banner') as HTMLElement).classList.add('hidden');
+  (document.getElementById('result-bar') as HTMLElement).classList.add('hidden');
+  (document.getElementById('share-text') as HTMLElement).classList.add('hidden');
+  (document.getElementById('share-status') as HTMLElement).textContent = '';
+  (document.getElementById('guess-history') as HTMLElement).innerHTML = '';
+  const input = document.getElementById('guess-input') as HTMLInputElement;
+  input.value = '';
+  input.disabled = false;
+  input.focus();
+}
+
+function buildShareText(): string {
+  const modeLine = state.mode === 'daily' ? `每日一题 · ${dateLabel()}` : '随机练习';
+  const rows: string[] = [];
+  let line = '';
+  for (const p of state.pcts) {
+    line += emojiFor(p);
+    if (line.length === 10) { rows.push(line); line = ''; }
+  }
+  if (line) rows.push(line);
+  return `🧠 摸鱼猜词 ${modeLine} · ${state.attempts} 次
+${rows.join('\n')}
+🟩≥88 🟨≥65 🟧≥35 🟥<35 ⬛0
+https://daily-fun.pages.dev/moyu`;
+}
+
+function showShare() {
+  const text = buildShareText();
+  const box = document.getElementById('share-text') as HTMLElement;
+  box.textContent = text;
+  box.classList.remove('hidden');
+  const status = document.getElementById('share-status') as HTMLElement;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      status.textContent = '✓ 已复制到剪贴板';
+    }).catch(() => {
+      status.textContent = '复制失败，可直接选中下方文本复制';
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  } else {
+    status.textContent = '可直接选中下方文本复制';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
 function submitGuess(word: string) {
   state.attempts++;
   const pct = calcRelation(word, state.target);
   const hit = pct >= 100;
+  state.pcts.push(pct);
   (document.getElementById('attempt-count') as HTMLElement).textContent = `第 ${state.attempts} 次`;
 
   const bar = document.getElementById('result-bar') as HTMLElement;
@@ -137,6 +222,13 @@ function submitGuess(word: string) {
     const banner = document.getElementById('success-banner') as HTMLElement;
     (document.getElementById('success-word') as HTMLElement).textContent = state.target;
     (document.getElementById('success-attempts') as HTMLElement).textContent = `用了 ${state.attempts} 次猜中`;
+    const best = getBest();
+    if (best === 0 || state.attempts < best) {
+      localStorage.setItem(BEST_KEY, String(state.attempts));
+      (document.getElementById('success-best') as HTMLElement).textContent = '🏆 新纪录！';
+    } else {
+      (document.getElementById('success-best') as HTMLElement).textContent = `🏆 最佳纪录 ${best} 次`;
+    }
     banner.classList.remove('hidden');
     (document.getElementById('guess-input') as HTMLInputElement).disabled = true;
   }
@@ -150,8 +242,10 @@ document.getElementById('guess-form')!.addEventListener('submit', (e) => {
   input.value = '';
 });
 
-document.getElementById('new-game')!.addEventListener('click', newGame);
-document.getElementById('again-btn')!.addEventListener('click', newGame);
+document.getElementById('share-btn')!.addEventListener('click', showShare);
+document.getElementById('new-game')!.addEventListener('click', () => startGame('random'));
+document.getElementById('back-daily')!.addEventListener('click', () => startGame('daily'));
+document.getElementById('again-btn')!.addEventListener('click', () => startGame(state.mode));
 
-newGame();
+startGame('daily');
 </script>

@@ -28,6 +28,21 @@ export function pickTarget(): string {
   return theme.words[Math.floor(Math.random() * theme.words.length)];
 }
 
+// 以日期为种子的目标词：当天所有玩家同一题，跨天翻新
+export function hashDate(date = new Date()): number {
+  const s = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+export function pickDailyTarget(date = new Date()): string {
+  const h = hashDate(date);
+  const theme = THEMES[h % THEMES.length];
+  const w = (h >>> 8) % theme.words.length;
+  return theme.words[w];
+}
+
 export function getHint(target: string): { themeName: string; emoji: string; length: number } {
   const theme = THEMES.find((t) => t.words.includes(target))!;
   return { themeName: theme.name, emoji: theme.emoji, length: target.length };
