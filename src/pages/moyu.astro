@@ -11,6 +11,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <div id="mode-banner" class="-mt-2 mb-4 flex flex-wrap items-center gap-2 text-sm">
     <span id="mode-daily" class="hidden items-center gap-1.5 rounded-lg bg-badge-bg px-3 py-1 font-semibold text-text-primary"></span>
     <span id="mode-random" class="hidden items-center gap-1.5 rounded-lg bg-badge-bg px-3 py-1 font-semibold text-text-primary"></span>
+    <span id="streak-badge" class="hidden items-center gap-1.5 rounded-lg bg-orange-100 px-3 py-1 font-semibold text-orange-600 dark:bg-orange-950/40 dark:text-orange-300"></span>
   </div>
 
   <div id="game" class="flex flex-col gap-4">
@@ -20,6 +21,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <span id="hint-length" class="text-sm text-text-secondary"></span>
       <div class="ml-auto flex items-center gap-2">
         <span id="attempt-count" class="text-xs text-text-secondary">第 0 次</span>
+        <button id="yesterday-btn" type="button" class="hidden rounded-lg bg-badge-bg px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-accent hover:text-white">
+          📅 昨日回顾
+        </button>
         <button id="back-daily" type="button" class="hidden rounded-lg bg-badge-bg px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-accent hover:text-white">
           ↩ 回到今日题
         </button>
@@ -76,17 +80,130 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     <!-- 历史猜测 -->
     <div id="guess-history" class="flex flex-col gap-1.5"></div>
+
+    <!-- 昨日回顾 -->
+    <div id="yesterday-panel" class="hidden rounded-xl border border-border bg-surface p-4">
+      <div class="flex items-center justify-between gap-2">
+        <p id="yesterday-title" class="text-sm font-bold text-text-primary"></p>
+        <span id="yesterday-close" class="cursor-pointer text-text-secondary hover:text-text-primary" title="关闭">✕</span>
+      </div>
+      <div id="yesterday-body" class="mt-3 text-sm text-text-secondary"></div>
+    </div>
   </div>
 </BaseLayout>
 
 <script>
 import { pickTarget, pickDailyTarget, getHint, calcRelation } from '../lib/fishGame';
 
-const state = { target: '', attempts: 0, lastPct: -1, mode: 'daily', pcts: [] as number[] };
+const state = { target: '', attempts: 0, lastPct: -1, mode: 'daily' as 'daily' | 'random', pcts: [] as number[] };
 const BEST_KEY = 'moyu-best';
+const STREAK_KEY = 'moyu-streak';
+const HIST_KEY = 'moyu-daily';
 
 function dateLabel(d = new Date()): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function dateKey(d = new Date()): string {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function yesterdayDate(): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d;
+}
+
+// ── 连击（每日题连续猜中天数）──
+interface StreakSave { last: string; n: number }
+function getStreak(): StreakSave {
+  try {
+    return { last: '', n: 0, ...(JSON.parse(localStorage.getItem(STREAK_KEY) || '{}')) } as StreakSave;
+  } catch { return { last: '', n: 0 }; }
+}
+function recordStreak(): number {
+  const today = dateKey();
+  const prev = getStreak();
+  let n: number;
+  if (prev.last === dateKey(yesterdayDate())) {
+    n = prev.n + 1;
+  } else if (prev.last === today) {
+    n = prev.n;
+  } else {
+    n = 1;
+  }
+  localStorage.setItem(STREAK_KEY, JSON.stringify({ last: today, n }));
+  return n;
+}
+function refreshStreakBadge() {
+  const el = document.getElementById('streak-badge') as HTMLElement;
+  const st = getStreak();
+  if (state.mode === 'daily' && st.n > 0) {
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+    el.textContent = `🔥 连续猜中 ${st.n} 天`;
+  } else {
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+  }
+}
+
+// ── 每日成绩历史（昨日回看）──
+interface DayRecord { target: string | null; attempts: number; solved: boolean; pcts: number[]; date: string }
+function loadDayRecord(key: string): DayRecord | null {
+  try {
+    const all = JSON.parse(localStorage.getItem(HIST_KEY) || '{}') as Record<string, DayRecord>;
+    return all[key] || null;
+  } catch { return null; }
+}
+function saveDayRecord(rec: DayRecord) {
+  try {
+    const all = JSON.parse(localStorage.getItem(HIST_KEY) || '{}') as Record<string, DayRecord>;
+    all[rec.date] = rec;
+    // 只保留最近 7 天，避免无限膨胀
+    const keys = Object.keys(all).sort().slice(-7);
+    for (const k of Object.keys(all)) if (!keys.includes(k)) delete all[k];
+    localStorage.setItem(HIST_KEY, JSON.stringify(all));
+  } catch { /* ignore */ }
+}
+function recordDailyGuess(pct: number, hit: boolean, target: string) {
+  if (state.mode !== 'daily') return;
+  const key = dateKey();
+  const rec = loadDayRecord(key) || { date: key, target: null, attempts: 0, solved: false, pcts: [] as number[] };
+  rec.attempts = state.attempts;
+  if (rec.pcts.length < state.attempts) rec.pcts.push(pct);
+  if (hit) { rec.solved = true; rec.target = target; }
+  saveDayRecord(rec);
+}
+
+function renderYesterday() {
+  const panel = document.getElementById('yesterday-panel') as HTMLElement;
+  const title = document.getElementById('yesterday-title') as HTMLElement;
+  const body = document.getElementById('yesterday-body') as HTMLElement;
+  const yKey = dateKey(yesterdayDate());
+  const rec = loadDayRecord(yKey);
+  title.textContent = `🔙 昨日回顾 · ${dateLabel(yesterdayDate())}`;
+  if (!rec || rec.pcts.length === 0) {
+    body.innerHTML = '<p class="opacity-70">昨天没有玩哦，今天来一局吧～</p>';
+  } else {
+    let rows = '';
+    let line = '';
+    for (const p of rec.pcts) {
+      line += emojiFor(p);
+      if (line.length === 10) { rows += `<div>${line}</div>`; line = ''; }
+    }
+    if (line) rows += `<div>${line}</div>`;
+    const result = rec.solved
+      ? `✅ 猜中了！目标词是「<b class="text-accent">${rec.target}</b>」，用了 ${rec.attempts} 次`
+      : `❌ 没猜中，一共猜了 ${rec.attempts} 次`;
+    body.innerHTML = `
+      <div class="mb-2 font-mono text-xs leading-relaxed">${rows || '<span class="opacity-50">（无猜测记录）</span>'}</div>
+      <p>${result}</p>`;
+  }
+  panel.classList.remove('hidden');
+  panel.classList.add('flex');
+  panel.classList.add('flex-col');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function emojiFor(pct: number): string {
@@ -124,6 +241,9 @@ function startGame(mode: 'daily' | 'random') {
   randomEl.classList.toggle('flex', mode === 'random');
   randomEl.textContent = '🎲 随机练习';
   (document.getElementById('back-daily') as HTMLElement).classList.toggle('hidden', mode !== 'random');
+  (document.getElementById('yesterday-btn') as HTMLElement).classList.toggle('hidden', mode !== 'daily');
+  (document.getElementById('yesterday-panel') as HTMLElement).classList.add('hidden');
+  refreshStreakBadge();
 
   const hint = getHint(state.target);
   (document.getElementById('hint-theme') as HTMLElement).textContent =
@@ -151,9 +271,11 @@ function buildShareText(): string {
     if (line.length === 10) { rows.push(line); line = ''; }
   }
   if (line) rows.push(line);
+  const streak = getStreak().n;
+  const streakLine = state.mode === 'daily' && streak > 0 ? `🔥 连击 ${streak} 天` : '';
   return `🧠 摸鱼猜词 ${modeLine} · ${state.attempts} 次
 ${rows.join('\n')}
-🟩≥88 🟨≥65 🟧≥35 🟥<35 ⬛0
+${streakLine ? streakLine + '\n' : ''}🟩≥88 🟨≥65 🟧≥35 🟥<35 ⬛0
 https://daily-fun.pages.dev/moyu`;
 }
 
@@ -202,6 +324,7 @@ function submitGuess(word: string) {
     feedback.textContent = '再试试其他词语';
   }
   state.lastPct = pct;
+    recordDailyGuess(pct, hit, state.target);
 
   // 历史列表
   const history = document.getElementById('guess-history') as HTMLElement;
@@ -231,6 +354,10 @@ function submitGuess(word: string) {
     }
     banner.classList.remove('hidden');
     (document.getElementById('guess-input') as HTMLInputElement).disabled = true;
+    if (state.mode === 'daily') {
+      recordStreak();
+      refreshStreakBadge();
+    }
   }
 }
 
@@ -246,6 +373,10 @@ document.getElementById('share-btn')!.addEventListener('click', showShare);
 document.getElementById('new-game')!.addEventListener('click', () => startGame('random'));
 document.getElementById('back-daily')!.addEventListener('click', () => startGame('daily'));
 document.getElementById('again-btn')!.addEventListener('click', () => startGame(state.mode));
+document.getElementById('yesterday-btn')!.addEventListener('click', renderYesterday);
+document.getElementById('yesterday-close')!.addEventListener('click', () => {
+  (document.getElementById('yesterday-panel') as HTMLElement).classList.add('hidden');
+});
 
 startGame('daily');
 </script>
